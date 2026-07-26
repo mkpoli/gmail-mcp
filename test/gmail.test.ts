@@ -4,8 +4,13 @@ import {
 	b64urlEncode,
 	buildRfc822,
 	decodeAttachmentText,
+	escapeHtml,
 	extractBody,
 	headerValue,
+	parseAddresses,
+	quoteHtml,
+	quotePlain,
+	replySubject,
 	summarizeMessage,
 	textPartAttachment,
 	truncate,
@@ -124,6 +129,72 @@ describe("buildRfc822", () => {
 		expect(parts[3].trim()).toBe("--");
 	});
 
+	test("nests mixed > related > alternative for attachments plus inline images", () => {
+		const png = btoa("fake-png-bytes");
+		const raw = buildRfc822({
+			to: "a@example.com",
+			subject: "s",
+			body: "plain",
+			htmlBody: '<img src="cid:logo1">',
+			attachments: [{ filename: "データ.csv", contentType: "text/csv", content: btoa("a,b") }],
+			inlineImages: [{ cid: "logo1", contentType: "image/png", content: png }],
+		});
+		const mixedAt = raw.indexOf("multipart/mixed");
+		const relatedAt = raw.indexOf("multipart/related");
+		const altAt = raw.indexOf("multipart/alternative");
+		expect(mixedAt).toBeGreaterThan(-1);
+		expect(relatedAt).toBeGreaterThan(mixedAt);
+		expect(altAt).toBeGreaterThan(relatedAt);
+		expect(raw).toContain("Content-ID: <logo1>");
+		expect(raw).toContain("Content-Disposition: inline");
+		expect(raw).toContain("Content-Disposition: attachment");
+		expect(raw).toContain("=?UTF-8?B?");
+		expect(raw).toContain(png);
+	});
+
+	test("rejects malformed attachment base64 and unsafe cids", () => {
+		expect(() =>
+			buildRfc822({
+				to: "a@example.com",
+				subject: "s",
+				body: "b",
+				attachments: [
+					{ filename: "x.bin", contentType: "application/octet-stream", content: "not base64!!" },
+				],
+			}),
+		).toThrow(/base64/);
+		expect(() =>
+			buildRfc822({
+				to: "a@example.com",
+				subject: "s",
+				body: "b",
+				htmlBody: "<p>x</p>",
+				inlineImages: [{ cid: "evil>\r\nX: 1", contentType: "image/png", content: btoa("x") }],
+			}),
+		).toThrow();
+	});
+
+	test("requires htmlBody when inline images are present", () => {
+		expect(() =>
+			buildRfc822({
+				to: "a@example.com",
+				subject: "s",
+				body: "b",
+				inlineImages: [{ cid: "c1", contentType: "image/png", content: btoa("x") }],
+			}),
+		).toThrow(/htmlBody/);
+	});
+
+	test("includes a From header for send-as aliases", () => {
+		const raw = buildRfc822({
+			to: "a@example.com",
+			from: "alias@example.org",
+			subject: "s",
+			body: "b",
+		});
+		expect(raw).toContain("From: alias@example.org");
+	});
+
 	test("stays single-part text/plain without htmlBody", () => {
 		const raw = buildRfc822({ to: "a@example.com", subject: "s", body: "b" });
 		expect(raw).not.toContain("multipart/alternative");
@@ -240,6 +311,47 @@ describe("textPartAttachment / decodeAttachmentText / truncate", () => {
 		const cut = truncate("a".repeat(150), 100);
 		expect(cut).toContain("a".repeat(100));
 		expect(cut).toContain("[truncated: 50 of 150 characters omitted]");
+	});
+});
+
+describe("reply helpers", () => {
+	test("parseAddresses handles display names with commas and bare addresses", () => {
+		expect(parseAddresses('"Doe, John" <j@example.com>, Jane <jane@example.org>')).toEqual([
+			"j@example.com",
+			"jane@example.org",
+		]);
+		expect(parseAddresses("solo@example.com")).toEqual(["solo@example.com"]);
+		expect(parseAddresses("a@example.com, b@example.org")).toEqual([
+			"a@example.com",
+			"b@example.org",
+		]);
+		expect(parseAddresses(undefined)).toEqual([]);
+		expect(parseAddresses("A <x@example.com>, B <x@example.com>")).toEqual(["x@example.com"]);
+	});
+
+	test("replySubject prefixes once", () => {
+		expect(replySubject("Hello")).toBe("Re: Hello");
+		expect(replySubject("Re: Hello")).toBe("Re: Hello");
+		expect(replySubject("RE: Hello")).toBe("RE: Hello");
+		expect(replySubject(undefined)).toBe("Re: ");
+	});
+
+	test("quotePlain prefixes every line", () => {
+		expect(quotePlain("A <a@example.com>", "Fri, 25 Jul 2026", "line1\nline2")).toBe(
+			"On Fri, 25 Jul 2026, A <a@example.com> wrote:\n> line1\n> line2",
+		);
+	});
+
+	test("quoteHtml escapes injected markup from the original mail", () => {
+		const html = quoteHtml("<script>x</script>", "d", "body with <b>tags</b> & ampersand");
+		expect(html).not.toContain("<script>");
+		expect(html).toContain("&lt;script&gt;");
+		expect(html).toContain("&lt;b&gt;tags&lt;/b&gt; &amp; ampersand");
+		expect(html).toContain("<blockquote");
+	});
+
+	test("escapeHtml covers the four metacharacters", () => {
+		expect(escapeHtml(`<a href="x">&</a>`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;");
 	});
 });
 

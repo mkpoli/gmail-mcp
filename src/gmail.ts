@@ -87,61 +87,183 @@ function textPart(mimeType: string, content: string): string[] {
 	];
 }
 
+export type FilePart = {
+	filename: string;
+	contentType: string;
+	// Standard base64 (whitespace tolerated).
+	content: string;
+};
+
+export type InlineImage = {
+	// Referenced from HTML as <img src="cid:...">.
+	cid: string;
+	contentType: string;
+	content: string;
+};
+
+function normalizeB64(name: string, content: string): string {
+	const cleaned = content.replace(/\s+/g, "");
+	if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleaned) || cleaned.length % 4 !== 0) {
+		throw new Error(`${name}: content must be standard base64`);
+	}
+	return wrap76(cleaned);
+}
+
+function filePart(p: FilePart): string[] {
+	assertHeaderSafe("attachment contentType", p.contentType);
+	assertHeaderSafe("attachment filename", p.filename);
+	const filename = encodeHeader(p.filename).replace(/"/g, "'");
+	return [
+		`Content-Type: ${p.contentType}; name="${filename}"`,
+		"Content-Transfer-Encoding: base64",
+		`Content-Disposition: attachment; filename="${filename}"`,
+		"",
+		normalizeB64(`attachment ${p.filename}`, p.content),
+	];
+}
+
+function inlinePart(img: InlineImage): string[] {
+	assertHeaderSafe("inline image contentType", img.contentType);
+	assertHeaderSafe("inline image cid", img.cid);
+	if (!/^[\w.@-]+$/.test(img.cid)) {
+		throw new Error(`invalid inline image cid: ${img.cid}`);
+	}
+	return [
+		`Content-Type: ${img.contentType}`,
+		"Content-Transfer-Encoding: base64",
+		`Content-ID: <${img.cid}>`,
+		"Content-Disposition: inline",
+		"",
+		normalizeB64(`inline image ${img.cid}`, img.content),
+	];
+}
+
+// Wraps parts (each a line array with its own headers) into one multipart body.
+function multipart(type: string, parts: string[][]): string[] {
+	const boundary = `=_gmail-mcp_${crypto.randomUUID()}`;
+	const lines = [`Content-Type: multipart/${type}; boundary="${boundary}"`, ""];
+	for (const part of parts) {
+		lines.push(`--${boundary}`, ...part, "");
+	}
+	lines.push(`--${boundary}--`);
+	return lines;
+}
+
 export function buildRfc822({
 	to,
 	cc,
 	bcc,
+	from,
 	subject,
 	body,
 	htmlBody,
+	attachments = [],
+	inlineImages = [],
 	inReplyTo,
 	references,
 }: {
 	to: string;
 	cc?: string;
 	bcc?: string;
+	// Send-as alias; must already be configured in the account, Gmail rejects
+	// or rewrites anything else.
+	from?: string;
 	subject: string;
 	body: string;
 	htmlBody?: string;
+	attachments?: FilePart[];
+	inlineImages?: InlineImage[];
 	inReplyTo?: string;
 	references?: string;
 }): string {
 	assertHeaderSafe("To", to);
 	if (cc) assertHeaderSafe("Cc", cc);
 	if (bcc) assertHeaderSafe("Bcc", bcc);
+	if (from) assertHeaderSafe("From", from);
 	assertHeaderSafe("Subject", subject);
 	if (inReplyTo) assertHeaderSafe("In-Reply-To", inReplyTo);
 	if (references) assertHeaderSafe("References", references);
+	if (inlineImages.length > 0 && !htmlBody) {
+		throw new Error("inline images require an htmlBody that references their cid");
+	}
 
 	const headers = [
 		`To: ${to}`,
 		...(cc ? [`Cc: ${cc}`] : []),
 		...(bcc ? [`Bcc: ${bcc}`] : []),
+		...(from ? [`From: ${from}`] : []),
 		`Subject: ${encodeHeader(subject)}`,
 		...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
 		...(references ? [`References: ${references}`] : []),
 		"MIME-Version: 1.0",
 	];
 
-	if (!htmlBody) {
-		return [...headers, ...textPart("text/plain", body)].join("\r\n");
+	// Innermost: the readable body, as plain text or plain+HTML alternative.
+	let core: string[] = htmlBody
+		? multipart("alternative", [textPart("text/plain", body), textPart("text/html", htmlBody)])
+		: textPart("text/plain", body);
+
+	// Inline images join the body in a related container.
+	if (inlineImages.length > 0) {
+		core = multipart("related", [core, ...inlineImages.map(inlinePart)]);
 	}
 
-	// multipart/alternative: plain text first, HTML preferred by capable clients.
-	const boundary = `=_gmail-mcp_${crypto.randomUUID()}`;
-	const lines = [
-		...headers,
-		`Content-Type: multipart/alternative; boundary="${boundary}"`,
-		"",
-		`--${boundary}`,
-		...textPart("text/plain", body),
-		"",
-		`--${boundary}`,
-		...textPart("text/html", htmlBody),
-		"",
-		`--${boundary}--`,
-	];
-	return lines.join("\r\n");
+	// File attachments wrap everything in a mixed container.
+	if (attachments.length > 0) {
+		core = multipart("mixed", [core, ...attachments.map(filePart)]);
+	}
+
+	return [...headers, ...core].join("\r\n");
+}
+
+// ---- Reply helpers ----------------------------------------------------------
+
+// Extracts bare addresses from a header value, tolerating display names with
+// commas inside quotes ("Doe, John" <j@example.com>).
+export function parseAddresses(header: string | undefined): string[] {
+	if (!header) return [];
+	const out: string[] = [];
+	for (const m of header.matchAll(/<([^<>\s]+@[^<>\s]+)>/g)) {
+		out.push(m[1].toLowerCase());
+	}
+	// Bare addresses without angle brackets (single or comma-separated).
+	if (out.length === 0) {
+		for (const piece of header.split(",")) {
+			const bare = piece.trim().match(/^([^\s@"]+@[^\s@"]+)$/);
+			if (bare) out.push(bare[1].toLowerCase());
+		}
+	}
+	return [...new Set(out)];
+}
+
+export function replySubject(original: string | undefined): string {
+	const s = original ?? "";
+	return /^\s*re:/i.test(s) ? s : `Re: ${s}`;
+}
+
+export function quotePlain(from: string, date: string, body: string): string {
+	const quoted = body
+		.split("\n")
+		.map((l) => `> ${l}`)
+		.join("\n");
+	return `On ${date}, ${from} wrote:\n${quoted}`;
+}
+
+export function escapeHtml(s: string): string {
+	return s
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;");
+}
+
+export function quoteHtml(from: string, date: string, plainBody: string): string {
+	return [
+		`<div>On ${escapeHtml(date)}, ${escapeHtml(from)} wrote:</div>`,
+		`<blockquote style="margin: 0 0 0 0.8ex; border-left: 1px solid #ccc; padding-left: 1ex;">`,
+		escapeHtml(plainBody).replace(/\n/g, "<br>\n"),
+		"</blockquote>",
+	].join("\n");
 }
 
 export function headerValue(message: any, name: string): string | undefined {
