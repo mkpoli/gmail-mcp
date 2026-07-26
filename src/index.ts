@@ -263,29 +263,27 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				addLabelIds: z.array(z.string()).default([]),
 				removeLabelIds: z.array(z.string()).default([]),
 			},
-			async ({ messageId, addLabelIds, removeLabelIds }) =>
-				this.text(
-					summarizeMessage(
-						await this.api(`/messages/${encodeURIComponent(messageId)}/modify`, {
-							method: "POST",
-							body: JSON.stringify({ addLabelIds, removeLabelIds }),
-						}),
-					),
-				),
+			async ({ messageId, addLabelIds, removeLabelIds }) => {
+				// The modify/trash responses carry no payload, so headers would be
+				// empty; report the label state that actually changed.
+				const m = await this.api(`/messages/${encodeURIComponent(messageId)}/modify`, {
+					method: "POST",
+					body: JSON.stringify({ addLabelIds, removeLabelIds }),
+				});
+				return this.text({ id: m.id, threadId: m.threadId, labelIds: m.labelIds });
+			},
 		);
 
 		this.server.tool(
 			"trash_message",
 			`Move a message to the trash in ${account} (reversible for 30 days)`,
 			{ messageId: z.string() },
-			async ({ messageId }) =>
-				this.text(
-					summarizeMessage(
-						await this.api(`/messages/${encodeURIComponent(messageId)}/trash`, {
-							method: "POST",
-						}),
-					),
-				),
+			async ({ messageId }) => {
+				const m = await this.api(`/messages/${encodeURIComponent(messageId)}/trash`, {
+					method: "POST",
+				});
+				return this.text({ id: m.id, threadId: m.threadId, labelIds: m.labelIds });
+			},
 		);
 
 		const draftFields = {
@@ -372,7 +370,23 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			{ maxResults: z.number().int().min(1).max(50).default(10) },
 			async ({ maxResults }) => {
 				const l = await this.api(`/drafts?maxResults=${maxResults}`);
-				return this.text(l.drafts ?? []);
+				const drafts: any[] = l.drafts ?? [];
+				// The list response carries ids only, which say nothing about which
+				// draft is which; pull the headers that identify them.
+				const detailed = await this.mapLimited(drafts, 8, async (d: any) => {
+					const full = await this.api(
+						`/drafts/${encodeURIComponent(d.id)}?format=metadata&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
+					);
+					return {
+						draftId: d.id,
+						messageId: full.message?.id,
+						to: headerValue(full.message, "To"),
+						subject: headerValue(full.message, "Subject"),
+						date: headerValue(full.message, "Date"),
+						snippet: full.message?.snippet,
+					};
+				});
+				return this.text(detailed);
 			},
 		);
 
@@ -509,14 +523,12 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			"untrash_message",
 			`Restore a message from the trash in ${account}`,
 			{ messageId: z.string() },
-			async ({ messageId }) =>
-				this.text(
-					summarizeMessage(
-						await this.api(`/messages/${encodeURIComponent(messageId)}/untrash`, {
-							method: "POST",
-						}),
-					),
-				),
+			async ({ messageId }) => {
+				const m = await this.api(`/messages/${encodeURIComponent(messageId)}/untrash`, {
+					method: "POST",
+				});
+				return this.text({ id: m.id, threadId: m.threadId, labelIds: m.labelIds });
+			},
 		);
 
 		this.server.tool(
