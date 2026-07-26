@@ -1,0 +1,27 @@
+{
+	"name": "gmail-mcp",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy",
+		"check": "biome check src test && tsc --noEmit",
+		"fix": "biome check --write src test",
+		"test": "bun test",
+		"types": "wrangler types"
+	},
+	"dependencies": {
+		"@cloudflare/workers-oauth-provider": "^0.8.1",
+		"@modelcontextprotocol/sdk": "^1.10.2",
+		"agents": "^0.17.1",
+		"hono": "^4.12.27",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.5",
+		"@types/bun": "^1.3.14",
+		"typescript": "^5.5.2",
+		"wrangler": "^4.90.0"
+	}
+}

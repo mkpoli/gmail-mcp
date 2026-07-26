@@ -1,0 +1,6 @@
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# openssl rand -hex 32
+COOKIE_ENCRYPTION_KEY=
+# comma-separated Google account emails permitted to authenticate
+ALLOWED_EMAILS=
