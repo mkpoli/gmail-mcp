@@ -78,12 +78,22 @@ function wrap76(s: string): string {
 	return s.replace(/(.{76})/g, "$1\r\n").replace(/\r\n$/, "");
 }
 
+function textPart(mimeType: string, content: string): string[] {
+	return [
+		`Content-Type: ${mimeType}; charset="UTF-8"`,
+		"Content-Transfer-Encoding: base64",
+		"",
+		wrap76(bytesToB64(new TextEncoder().encode(content))),
+	];
+}
+
 export function buildRfc822({
 	to,
 	cc,
 	bcc,
 	subject,
 	body,
+	htmlBody,
 	inReplyTo,
 	references,
 }: {
@@ -92,6 +102,7 @@ export function buildRfc822({
 	bcc?: string;
 	subject: string;
 	body: string;
+	htmlBody?: string;
 	inReplyTo?: string;
 	references?: string;
 }): string {
@@ -102,7 +113,7 @@ export function buildRfc822({
 	if (inReplyTo) assertHeaderSafe("In-Reply-To", inReplyTo);
 	if (references) assertHeaderSafe("References", references);
 
-	const lines = [
+	const headers = [
 		`To: ${to}`,
 		...(cc ? [`Cc: ${cc}`] : []),
 		...(bcc ? [`Bcc: ${bcc}`] : []),
@@ -110,10 +121,25 @@ export function buildRfc822({
 		...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
 		...(references ? [`References: ${references}`] : []),
 		"MIME-Version: 1.0",
-		'Content-Type: text/plain; charset="UTF-8"',
-		"Content-Transfer-Encoding: base64",
+	];
+
+	if (!htmlBody) {
+		return [...headers, ...textPart("text/plain", body)].join("\r\n");
+	}
+
+	// multipart/alternative: plain text first, HTML preferred by capable clients.
+	const boundary = `=_gmail-mcp_${crypto.randomUUID()}`;
+	const lines = [
+		...headers,
+		`Content-Type: multipart/alternative; boundary="${boundary}"`,
 		"",
-		wrap76(bytesToB64(new TextEncoder().encode(body))),
+		`--${boundary}`,
+		...textPart("text/plain", body),
+		"",
+		`--${boundary}`,
+		...textPart("text/html", htmlBody),
+		"",
+		`--${boundary}--`,
 	];
 	return lines.join("\r\n");
 }

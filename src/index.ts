@@ -221,12 +221,13 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			{
 				to: z.string(),
 				subject: z.string(),
-				body: z.string(),
+				body: z.string().describe("Plain-text body"),
+				htmlBody: z.string().optional().describe("HTML alternative shown by rich clients"),
 				cc: z.string().optional(),
 				bcc: z.string().optional(),
 			},
-			async ({ to, subject, body, cc, bcc }) => {
-				const raw = b64urlEncode(buildRfc822({ to, cc, bcc, subject, body }));
+			async ({ to, subject, body, htmlBody, cc, bcc }) => {
+				const raw = b64urlEncode(buildRfc822({ to, cc, bcc, subject, body, htmlBody }));
 				const d = await this.api("/drafts", {
 					method: "POST",
 					body: JSON.stringify({ message: { raw } }),
@@ -251,7 +252,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			{
 				to: z.string(),
 				subject: z.string(),
-				body: z.string(),
+				body: z.string().describe("Plain-text body"),
+				htmlBody: z.string().optional().describe("HTML alternative shown by rich clients"),
 				cc: z.string().optional(),
 				bcc: z.string().optional(),
 				threadId: z.string().optional(),
@@ -260,9 +262,18 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					.optional()
 					.describe("Message-ID header value of the message being replied to"),
 			},
-			async ({ to, subject, body, cc, bcc, threadId, inReplyTo }) => {
+			async ({ to, subject, body, htmlBody, cc, bcc, threadId, inReplyTo }) => {
 				const raw = b64urlEncode(
-					buildRfc822({ to, cc, bcc, subject, body, inReplyTo, references: inReplyTo }),
+					buildRfc822({
+						to,
+						cc,
+						bcc,
+						subject,
+						body,
+						htmlBody,
+						inReplyTo,
+						references: inReplyTo,
+					}),
 				);
 				const m = await this.api("/messages/send", {
 					method: "POST",

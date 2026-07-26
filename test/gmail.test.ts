@@ -105,6 +105,31 @@ describe("buildRfc822", () => {
 		expect(b64urlDecode(encoded.replace(/\+/g, "-").replace(/\//g, "_"))).toBe(body);
 	});
 
+	test("builds multipart/alternative when htmlBody is given", () => {
+		const raw = buildRfc822({
+			to: "a@example.com",
+			subject: "s",
+			body: "plain version",
+			htmlBody: "<h1>rich version</h1>",
+		});
+		const boundary = raw.match(/boundary="([^"]+)"/)?.[1];
+		expect(boundary).toBeTruthy();
+		expect(raw).toContain(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+		const parts = raw.split(`--${boundary}`);
+		expect(parts.length).toBe(4);
+		expect(parts[1]).toContain('Content-Type: text/plain; charset="UTF-8"');
+		expect(atob(parts[1].trim().split("\r\n").pop() ?? "")).toBe("plain version");
+		expect(parts[2]).toContain('Content-Type: text/html; charset="UTF-8"');
+		expect(atob(parts[2].trim().split("\r\n").pop() ?? "")).toBe("<h1>rich version</h1>");
+		expect(parts[3].trim()).toBe("--");
+	});
+
+	test("stays single-part text/plain without htmlBody", () => {
+		const raw = buildRfc822({ to: "a@example.com", subject: "s", body: "b" });
+		expect(raw).not.toContain("multipart/alternative");
+		expect(raw).toContain('Content-Type: text/plain; charset="UTF-8"');
+	});
+
 	test("wraps encoded body lines at 76 characters", () => {
 		const raw = buildRfc822({ to: "a@example.com", subject: "s", body: "x".repeat(600) });
 		const bodyLines = raw.split("\r\n\r\n")[1].split("\r\n");
