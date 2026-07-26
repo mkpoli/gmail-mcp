@@ -27,6 +27,9 @@ type TokenCache = { accessToken: string; expiresAt: number };
 // memory or the MCP client's context window.
 const BODY_LIMIT = 50_000;
 const THREAD_BODY_LIMIT = 10_000;
+// Whole-thread ceiling: a long notification thread would otherwise return
+// hundreds of kilobytes of quoted machine-generated mail.
+const THREAD_TOTAL_BUDGET = 30_000;
 // Base64 payload budget for attachment downloads (~1.5 MB of file data).
 const ATTACHMENT_B64_LIMIT = 2_000_000;
 
@@ -99,8 +102,32 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				// that just failed, so refresh unconditionally before retrying.
 				return gmailFetch(await this.token(true), path, init);
 			}
+			// Gmail's per-user rate limit is bursty; one backoff clears most of it.
+			if (e instanceof GmailApiError && (e.status === 429 || e.status === 503)) {
+				await new Promise((r) => setTimeout(r, 1200));
+				return gmailFetch(await this.token(), path, init);
+			}
 			throw e;
 		}
+	}
+
+	// Gmail bills messages.get at 5 quota units against a 250-unit/second budget,
+	// so a wide search must not fire every metadata fetch at once.
+	private async mapLimited<T, R>(
+		items: T[],
+		limit: number,
+		fn: (item: T) => Promise<R>,
+	): Promise<R[]> {
+		const out: R[] = new Array(items.length);
+		let next = 0;
+		const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+			while (next < items.length) {
+				const i = next++;
+				out[i] = await fn(items[i]);
+			}
+		});
+		await Promise.all(workers);
+		return out;
 	}
 
 	// Inline part data first; when Gmail externalizes a large text part as an
@@ -146,11 +173,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				if (pageToken) params.set("pageToken", pageToken);
 				const list = await this.api(`/messages?${params}`);
 				const ids: string[] = (list.messages ?? []).map((m: any) => m.id);
-				const messages = await Promise.all(
-					ids.map((id) =>
-						this.api(
-							`/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
-						),
+				const messages = await this.mapLimited(ids, 8, (id) =>
+					this.api(
+						`/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
 					),
 				);
 				return this.text({
@@ -178,18 +203,48 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 		this.server.tool(
 			"get_thread",
-			`Read a whole conversation thread from ${account}`,
-			{ threadId: z.string() },
-			async ({ threadId }) => {
-				const t = await this.api(`/threads/${encodeURIComponent(threadId)}?format=full`);
-				return this.text(
-					await Promise.all(
-						(t.messages ?? []).map(async (m: any) => ({
-							...summarizeMessage(m),
-							body: truncate(await this.messageBody(m), THREAD_BODY_LIMIT),
-						})),
-					),
+			`Read a conversation thread from ${account}. Bodies share a total budget, so long threads come back summarized — read individual messages with get_message`,
+			{
+				threadId: z.string(),
+				includeBodies: z
+					.boolean()
+					.default(true)
+					.describe("false returns headers and snippets only"),
+				maxMessages: z
+					.number()
+					.int()
+					.min(1)
+					.max(50)
+					.default(10)
+					.describe("Newest messages are kept when a thread exceeds this"),
+			},
+			async ({ threadId, includeBodies, maxMessages }) => {
+				const t = await this.api(
+					`/threads/${encodeURIComponent(threadId)}?format=${includeBodies ? "full" : "metadata"}`,
 				);
+				const all: any[] = t.messages ?? [];
+				const kept = all.slice(-maxMessages);
+				const omitted = all.length - kept.length;
+
+				if (!includeBodies) {
+					return this.text({
+						messageCount: all.length,
+						omitted,
+						messages: kept.map(summarizeMessage),
+					});
+				}
+
+				// One budget for the whole thread; each message gets an equal share
+				// so a single long message cannot crowd out the rest.
+				const perMessage = Math.max(
+					1000,
+					Math.floor(THREAD_TOTAL_BUDGET / Math.max(kept.length, 1)),
+				);
+				const messages = await this.mapLimited(kept, 4, async (m: any) => ({
+					...summarizeMessage(m),
+					body: truncate(await this.messageBody(m), Math.min(perMessage, THREAD_BODY_LIMIT)),
+				}));
+				return this.text({ messageCount: all.length, omitted, messages });
 			},
 		);
 
