@@ -33,6 +33,16 @@ MCP client ──OAuth 2.1──▶ Worker (OAuthProvider) ──OAuth 2.0──
 
 The granted scope is `gmail.modify`: permanent deletion and account settings (filters, forwarding) stay out of reach by construction.
 
+### Verified against live mailboxes
+
+Every tool has passed an end-to-end run between two real Gmail accounts — one connected through this server, one independent account checking what actually arrived:
+
+- `whoami`, `list_labels`, and `search_messages` against a mailbox of ~15k messages, including user labels with CJK names and pagination via `nextPageToken`.
+- A multipart/alternative message (plain text + styled HTML table) sent with a Japanese subject line: the RFC 2047 subject, both MIME parts, and mixed 日本語・アイヌ語・中文 content arrived intact at the receiving account, HTML rendering confirmed from the recipient's side.
+- Reply threading metadata (`Message-ID` capture on read, `In-Reply-To`/`References` on send).
+- The draft lifecycle (`create_draft`, `list_drafts`), label round-trip (star and unstar via `modify_labels`), and `trash_message`.
+- Body extraction on read: text decoded from the sender's own multipart, charset honored per part.
+
 ## Deploy your own
 
 Requirements: a Cloudflare account, a domain on it, [bun](https://bun.sh), and a Google Cloud project.
