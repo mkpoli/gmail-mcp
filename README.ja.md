@@ -10,13 +10,13 @@ Gmail を Claude などの AI アシスタントにつなぐ。複数アカウ�
 
 *[English README](./README.md)*
 
-<div align="center">
+<p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/demo-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="./docs/demo-light.svg">
   <img src="./docs/demo-light.svg" alt="アシスタントが仕事用と個人用の受信箱を検索し、添付付きでスレッドに返信する様子" width="760">
 </picture>
-</div>
+</p>
 
 **gmail-mcp** は Gmail を Claude をはじめとする [MCP](https://modelcontextprotocol.io/) クライアントにつなぐ。**検索と閲覧**、引用付きの**送信と全員返信**、**転送**、**添付とインライン画像**、下書き・ラベル・スレッドの操作までを、**複数の Google アカウントで同時に**扱える。
 
@@ -24,9 +24,9 @@ Gmail を Claude などの AI アシスタントにつなぐ。複数アカウ�
 
 ここに来る理由はたいてい二つある。Claude と Google の公式 Gmail コネクタは、読むことと下書きまではできるが**送信ができず**、アシスタント1つにつき Google アカウントも1つに限られる。送信できる実装の多くはローカルのプロセスで、机の前では快適でも、外出先のスマートフォンからは見えない。
 
-<div align="center">
+<p align="center">
 <img src="./docs/comparison.svg" alt="Gmail MCP サーバーの機能比較" width="820">
-</div>
+</p>
 
 [google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp) はこの分野でもっとも完成度が高い。Gmail だけでなく Workspace 全体を扱い、Gmail の署名の付加や URL からの添付取得など、gmail-mcp にない機能もある。複数アカウントの扱いは、呼び出しのたびに宛先アカウントを引数で渡す設計だ。接続そのものにメールボックスを結びつける gmail-mcp では、引数を間違えてもどこにも届かない。
 
@@ -140,4 +140,6 @@ bun run deploy
 
 ## ライセンス
 
-[MIT](./LICENSE)。`src/workers-oauth-utils.ts` は Cloudflare の [remote-mcp-github-oauth デモ](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth)（MIT）に由来する。
+Copyright © 2026 mkpoli. [MIT License](./LICENSE) で公開。
+
+`src/workers-oauth-utils.ts` は [cloudflare/ai](https://github.com/cloudflare/ai) の [remote-mcp-github-oauth デモ](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth) に由来する。Copyright © 2025 Cloudflare, Inc.、MIT License に基づき利用。詳細は [THIRD-PARTY.md](./THIRD-PARTY.md)。

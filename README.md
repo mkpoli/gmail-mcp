@@ -19,13 +19,13 @@
 
 </div>
 
-<div align="center">
+<p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/demo-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="./docs/demo-light.svg">
   <img src="./docs/demo-light.svg" alt="An assistant searches a work and a personal mailbox, then replies to a thread with an attachment" width="760">
 </picture>
-</div>
+</p>
 
 **gmail-mcp** connects Gmail to Claude and any other [MCP](https://modelcontextprotocol.io/) client. It can **search and read** mail, **send and reply-all** with quoted history, **forward**, handle **attachments and inline images**, and manage drafts, labels, and threads — across **several Google accounts at the same time**.
 
@@ -37,9 +37,9 @@ Two things push people here. The Gmail connectors built into Claude and Google r
 
 ## How it compares
 
-<div align="center">
+<p align="center">
 <img src="./docs/comparison-en.svg" alt="gmail-mcp compared with built-in connectors, google_workspace_mcp, and Gmail-MCP-Server" width="880">
-</div>
+</p>
 
 <details>
 <summary><b>A longer comparison</b> — six projects, twelve rows</summary>
@@ -189,13 +189,13 @@ sequenceDiagram
     W->>C: tool result
 ```
 
-<div align="center">
+<p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/architecture-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="./docs/architecture-light.svg">
   <img src="./docs/architecture-light.svg" alt="An MCP client connects to your Cloudflare Worker, which calls the Gmail API" width="720">
 </picture>
-</div>
+</p>
 
 | Layer | File | What it does |
 | :-- | :-- | :-- |
@@ -273,4 +273,6 @@ bun run deploy
 
 ## License
 
-[MIT](./LICENSE). `src/workers-oauth-utils.ts` comes from Cloudflare's [remote-mcp-github-oauth demo](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth) (MIT).
+Copyright © 2026 mkpoli. Released under the [MIT License](./LICENSE).
+
+`src/workers-oauth-utils.ts` is derived from the [remote-mcp-github-oauth demo](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth) in [cloudflare/ai](https://github.com/cloudflare/ai), Copyright © 2025 Cloudflare, Inc., used under the MIT License. See [THIRD-PARTY.md](./THIRD-PARTY.md).
