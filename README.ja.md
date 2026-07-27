@@ -10,6 +10,14 @@ Gmail を Claude などの AI アシスタントにつなぐ。複数アカウ�
 
 *[English README](./README.md)*
 
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/demo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./docs/demo-light.svg">
+  <img src="./docs/demo-light.svg" alt="アシスタントが仕事用と個人用の受信箱を検索し、添付付きでスレッドに返信する様子" width="760">
+</picture>
+</div>
+
 **gmail-mcp** は Gmail を Claude をはじめとする [MCP](https://modelcontextprotocol.io/) クライアントにつなぐ。**検索と閲覧**、引用付きの**送信と全員返信**、**転送**、**添付とインライン画像**、下書き・ラベル・スレッドの操作までを、**複数の Google アカウントで同時に**扱える。
 
 置き場所は**自分の Cloudflare Worker**。同じ接続先に、ノート PC の Claude Code からも、ブラウザの claude.ai からも、スマートフォンからも届く。接続1つにつき Google アカウントは1つ、リフレッシュトークンは**自分の** Cloudflare アカウントから外に出ない。

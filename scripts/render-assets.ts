@@ -7,7 +7,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 const INK = { light: "#16181d", dark: "#e8eaee" };
-const SOURCES = ["docs/logo.svg", "docs/architecture.svg"];
+const SOURCES = ["docs/logo.svg", "docs/architecture.svg", "docs/demo.svg"];
 
 for (const source of SOURCES) {
 	const svg = readFileSync(source, "utf8");

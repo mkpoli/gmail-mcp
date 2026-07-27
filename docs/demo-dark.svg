@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 524" width="760" height="524" role="img"
+     aria-label="An assistant searches two connected mailboxes, then sends a reply with an attachment">
+  <defs>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6821F"/>
+      <stop offset="1" stop-color="#E8590C"/>
+    </linearGradient>
+    <style>
+      .ui { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .msg { font-size: 14.5px; fill: #e8eaee; }
+      .meta { font-size: 11.5px; fill: #e8eaee; fill-opacity: 0.55; }
+      .chip { font-size: 11.5px; fill: #e8eaee; fill-opacity: 0.75; }
+      .tool { font-size: 11.5px; fill: #F6821F; font-weight: 600; }
+      .surface { fill: #e8eaee; fill-opacity: 0.05; }
+      .bubble { fill: #e8eaee; fill-opacity: 0.07; }
+      .user { fill: url(#accent); fill-opacity: 0.16; }
+      .edge { stroke: #e8eaee; stroke-opacity: 0.14; fill: none; }
+      .pill { stroke: #e8eaee; stroke-opacity: 0.22; fill: none; }
+      .ok { stroke: #2ea44f; }
+    </style>
+  </defs>
+
+  <!-- window -->
+  <rect class="surface" x="1" y="1" width="758" height="522" rx="18"/>
+  <rect class="edge" x="1" y="1" width="758" height="522" rx="18"/>
+  <line class="edge" x1="1" y1="57" x2="759" y2="57"/>
+
+  <!-- header: the two connected mailboxes -->
+  <circle cx="28" cy="29" r="5" fill="#F6821F" fill-opacity="0.85"/>
+  <text class="ui msg" x="44" y="34" font-weight="600">Assistant</text>
+  <rect class="pill" x="470" y="18" width="122" height="22" rx="11"/>
+  <text class="mono chip" x="531" y="33" text-anchor="middle">gmail-personal</text>
+  <rect class="pill" x="602" y="18" width="94" height="22" rx="11"/>
+  <text class="mono chip" x="649" y="33" text-anchor="middle">gmail-work</text>
+  <circle cx="712" cy="29" r="3.5" fill="#2ea44f"/>
+
+  <!-- 1 · user asks -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.01;0.03;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="translate" values="0 10;0 10;0 0;0 0;0 0;0 0" keyTimes="0;0.01;0.03;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <rect class="user" x="368" y="76" width="368" height="40" rx="14"/>
+    <text class="ui msg" x="388" y="101">Anything urgent in either inbox this morning?</text>
+  </g>
+
+  <!-- 2 · tool call — work mailbox -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.08;0.10;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="translate" values="0 8;0 8;0 0;0 0;0 0;0 0" keyTimes="0;0.08;0.10;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <rect class="pill" x="24" y="130" width="340" height="30" rx="15"/>
+    <text class="mono tool" x="44" y="149">search_messages</text>
+    <text class="mono chip" x="156" y="149">gmail-work · is:unread</text>
+    <!-- pending dot, then a check -->
+    <circle cx="340" cy="145" r="3.5" fill="#e8eaee" fill-opacity="0.45">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.09;0.10;0.15;0.155;1" dur="17s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="2.5;4;2.5" dur="1.1s" repeatCount="indefinite"/>
+    </circle>
+    <path class="ok" d="M334 145 l4 4 l7 -8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.15;0.16;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- 3 · tool call — personal mailbox -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.15;0.17;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="translate" values="0 8;0 8;0 0;0 0;0 0;0 0" keyTimes="0;0.15;0.17;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <rect class="pill" x="24" y="168" width="372" height="30" rx="15"/>
+    <text class="mono tool" x="44" y="187">search_messages</text>
+    <text class="mono chip" x="156" y="187">gmail-personal · is:unread</text>
+    <circle cx="372" cy="183" r="3.5" fill="#e8eaee" fill-opacity="0.45">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.16;0.17;0.22;0.225;1" dur="17s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="2.5;4;2.5" dur="1.1s" repeatCount="indefinite"/>
+    </circle>
+    <path class="ok" d="M366 183 l4 4 l7 -8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.22;0.23;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- 4 · assistant summarises both mailboxes -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.23;0.25;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="translate" values="0 10;0 10;0 0;0 0;0 0;0 0" keyTimes="0;0.23;0.25;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <rect class="bubble" x="24" y="210" width="452" height="86" rx="14"/>
+    <text class="ui msg" x="44" y="236">Two need you today.</text>
+    <text class="ui msg" x="44" y="259" fill-opacity="0.85">· Acme — PO #4417 waiting on your approval <tspan class="mono" font-size="11.5" fill-opacity="0.55">work</tspan></text>
+    <text class="ui msg" x="44" y="281" fill-opacity="0.85">· Lease renewal, reply by Friday <tspan class="mono" font-size="11.5" fill-opacity="0.55">personal</tspan></text>
+  </g>
+
+  <!-- 5 · user asks for a reply with an attachment -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.40;0.42;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="translate" values="0 10;0 10;0 0;0 0;0 0;0 0" keyTimes="0;0.40;0.42;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <rect class="user" x="288" y="310" width="448" height="62" rx="14"/>
+    <text class="ui msg" x="308" y="335">Tell Acme the PO is approved and attach</text>
+    <text class="ui msg" x="308" y="357">the signed copy. Keep everyone on the thread.</text>
+  </g>
+
+  <!-- 6 · tool call — reply_all with an attachment -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.48;0.50;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="translate" values="0 8;0 8;0 0;0 0;0 0;0 0" keyTimes="0;0.48;0.50;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <rect class="pill" x="24" y="386" width="392" height="30" rx="15"/>
+    <text class="mono tool" x="44" y="405">reply_all</text>
+    <text class="mono chip" x="120" y="405">gmail-work · + po-4417-signed.pdf</text>
+    <circle cx="392" cy="401" r="3.5" fill="#e8eaee" fill-opacity="0.45">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.49;0.50;0.56;0.565;1" dur="17s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="2.5;4;2.5" dur="1.1s" repeatCount="indefinite"/>
+    </circle>
+    <path class="ok" d="M386 401 l4 4 l7 -8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.56;0.57;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- 7 · assistant confirms what actually went out -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.58;0.60;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <animateTransform attributeName="transform" type="translate" values="0 10;0 10;0 0;0 0;0 0;0 0" keyTimes="0;0.58;0.60;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
+    <rect class="bubble" x="24" y="428" width="470" height="64" rx="14"/>
+    <text class="ui msg" x="44" y="454">Sent from your work address, to billing@ with</text>
+    <text class="ui msg" x="44" y="476">procurement@ still on copy. PDF attached.</text>
+  </g>
+</svg>

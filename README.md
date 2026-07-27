@@ -19,6 +19,14 @@
 
 </div>
 
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/demo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./docs/demo-light.svg">
+  <img src="./docs/demo-light.svg" alt="An assistant searches a work and a personal mailbox, then replies to a thread with an attachment" width="760">
+</picture>
+</div>
+
 **gmail-mcp** connects Gmail to Claude and any other [MCP](https://modelcontextprotocol.io/) client. It can **search and read** mail, **send and reply-all** with quoted history, **forward**, handle **attachments and inline images**, and manage drafts, labels, and threads — across **several Google accounts at the same time**.
 
 It runs as a remote server on **your own Cloudflare Worker**, so the same connection answers from Claude Code on a laptop, claude.ai in a browser, and Claude on a phone. Each connection signs in to **one** Google account, and the Google refresh token stays in **your** Cloudflare account.
