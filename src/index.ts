@@ -394,27 +394,37 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			"send_message",
 			`Send mail as ${account}. For replies pass threadId plus the original's Message-ID header as inReplyTo`,
 			{
-				to: z.string(),
-				subject: z.string(),
-				body: z.string().describe("Plain-text body"),
-				htmlBody: z.string().optional().describe("HTML alternative shown by rich clients"),
-				cc: z.string().optional(),
-				bcc: z.string().optional(),
+				...draftFields,
 				threadId: z.string().optional(),
 				inReplyTo: z
 					.string()
 					.optional()
 					.describe("Message-ID header value of the message being replied to"),
 			},
-			async ({ to, subject, body, htmlBody, cc, bcc, threadId, inReplyTo }) => {
+			async ({
+				to,
+				subject,
+				body,
+				htmlBody,
+				cc,
+				bcc,
+				from,
+				attachments,
+				inlineImages,
+				threadId,
+				inReplyTo,
+			}) => {
 				const raw = b64urlEncode(
 					buildRfc822({
 						to,
 						cc,
 						bcc,
+						from,
 						subject,
 						body,
 						htmlBody,
+						attachments,
+						inlineImages,
 						inReplyTo,
 						references: inReplyTo,
 					}),
