@@ -1,12 +1,13 @@
 # gmail-mcp
 
-把 Gmail 接到 AI 助手上。多个账号同时连，服务器是自己的。
+**给AI助手接上Gmail。多个账号同时在线，部署在你自己的服务器上。**
 
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
+[![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![23 tools](https://img.shields.io/badge/tools-23-0b7285)](#能做什么)
-[![tests](https://img.shields.io/badge/tests-66_passing-success?logo=bun&logoColor=white)](#开发)
+[![tests](https://img.shields.io/badge/tests-66_passing-success?logo=bun&logoColor=white)](#测试)
 
 *[English README](./README.md) · [日本語版](./README.ja.md)*
 
@@ -14,47 +15,47 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/demo.zh-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="./docs/demo.zh-light.svg">
-  <img src="./docs/demo.zh-light.svg" alt="助手先查工作和个人两个邮箱，再带着盖章的附件回复" width="760">
+  <img src="./docs/demo.zh-light.svg" alt="助手搜索工作和个人两个邮箱，再带着附件回复一个会话" width="760">
 </picture>
 </p>
 
-**gmail-mcp** 把 Gmail 接到 Claude 和其他 [MCP](https://modelcontextprotocol.io/) 客户端上。它能**搜索和阅读**邮件，**发送、全部回复**并带上引用，**转发**，处理**附件和内嵌图片**，管理草稿、标签和会话，而且这些都可以**在多个 Google 账号上同时进行**。
+**gmail-mcp**把Gmail接到Claude以及任何[MCP](https://modelcontextprotocol.io/)客户端上。搜索和阅读邮件、发送和带引用的全部回复、转发、处理附件与内嵌图片、管理草稿、标签和会话——还可以在多个Google账号上同时进行。
 
-它跑在**你自己的 Cloudflare Worker** 上，所以笔记本上的 Claude Code、浏览器里的 claude.ai、手机上的 Claude 连的是同一个地址。每个连接登录一个 Google 账号，刷新令牌留在**你自己的** Cloudflare 账号里。
+服务跑在**你自己的Cloudflare Worker**上，经由网络访问：笔记本上的Claude Code、浏览器里的claude.ai、手机上的Claude，连的都是同一个地址。每条连接登录**一个**Google账号，Google的refresh token保存在**你自己**的Cloudflare账号里。
 
-来这里的人通常有两个理由。Claude 和 Google 自带的 Gmail 连接器能读信、能写草稿，但**发不出去**，而且一个助手账号只能绑一个 Google 账号。能发信的实现大多是本机进程，坐在电脑前好用，手机上够不着。
+找到这里的人多半因为两件事。Claude和Google内置的Gmail连接器可以读信、写草稿，但**不能发送**，并且一个助手账号只能绑定一个Google账号。能发信的方案大多是本地进程，坐在电脑前好用，手机上够不着。
 
 ---
 
-## 和其他方案的对比
+## 方案对比
 
 <p align="center">
-<img src="./docs/comparison-zh.svg" alt="gmail-mcp 与官方连接器、google_workspace_mcp、Gmail-MCP-Server 的对比" width="880">
+<img src="./docs/comparison-zh.svg" alt="gmail-mcp与内置连接器、google_workspace_mcp、Gmail-MCP-Server的对比" width="880">
 </p>
 
 <details>
-<summary><b>更详细的对比</b> — 六个项目，十二项</summary>
+<summary><b>更完整的对比</b>——六个项目，十二行</summary>
 
 <br>
 
-| | **gmail-mcp** | [Claude](https://claude.com/connectors/gmail) · [Google](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server) 官方 | [taylorwilsdon/<br>google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp) | [ArtyMcLabin/<br>Gmail-MCP-Server](https://github.com/ArtyMcLabin/Gmail-MCP-Server) | [shinzo-labs/<br>gmail-mcp](https://github.com/shinzo-labs/gmail-mcp) | [aaronsb/<br>google-workspace-mcp](https://github.com/aaronsb/google-workspace-mcp) |
+| | **gmail-mcp** | [Claude](https://claude.com/connectors/gmail) · [Google](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server)内置 | [taylorwilsdon/<br>google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp) | [ArtyMcLabin/<br>Gmail-MCP-Server](https://github.com/ArtyMcLabin/Gmail-MCP-Server) | [shinzo-labs/<br>gmail-mcp](https://github.com/shinzo-labs/gmail-mcp) | [aaronsb/<br>google-workspace-mcp](https://github.com/aaronsb/google-workspace-mcp) |
 | :-- | :-: | :-: | :-: | :-: | :-: | :-: |
-| 运行环境 | Cloudflare Workers | 厂商托管 | 自建服务器或本机 | 本机 | 本机 | 本机 |
-| 手机上能用 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| 多账号同时连 | ✅ 每个连接绑定一个 | ❌ | ✅ 调用时指定 | ❌ 仅别名 | ❌ | ✅ 调用时指定 |
-| 发送邮件 | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| 附件与 `cid:` 内嵌图片 | ✅ | 未公开 | ✅ | ✅ | ❌ | ✅ |
-| 全部回复并引用原文 | ✅ | ❌ | 仅草稿 | 不带引用 | ❌ | ✅ |
+| 运行位置 | Cloudflare Workers | 厂商托管 | 自有服务器或本地 | 本地 | 本地 | 本地 |
+| 手机上可达 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 同时多个邮箱 | ✅ 按连接绑定 | ❌ | ✅ 调用时指定 | ❌ 仅别名 | ❌ | ✅ 调用时指定 |
+| 发信 | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| 附件 · `cid:`内嵌图片 | ✅ | 未公开 | ✅ | ✅ | ❌ | ✅ |
+| 全部回复并引用原文 | ✅ | ❌ | 仅草稿 | 无引用 | ❌ | ✅ |
 | 转发 | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ |
-| 按各部分声明的字符集解码 | ✅ | — | ❌ 一律当 UTF-8 | ❌ 一律当 UTF-8 | ❌ | ❌ |
-| 拒绝 CRLF 头注入 | ✅ | — | ✅ 框架层 | ✅ 过滤 | ❌ **无** | ✅ |
-| 邮箱设置（过滤器、休假回复） | ❌ 不在授权范围 | ❌ | 过滤器 | 过滤器 | ✅ | ❌ |
-| 工具数量 | 23 | 11–16 | 14（Gmail 部分） | 30 | 64 | 11 |
-| 刷新令牌在谁手里 | 自己 | 厂商 | 自己 | 自己 | 自己 | 自己 |
+| 按part声明的字符集解码 | ✅ | — | ❌ 假定UTF-8 | ❌ 假定UTF-8 | ❌ | ❌ |
+| 拒绝CRLF头注入 | ✅ | — | ✅ 框架层 | ✅ 剥离 | ❌ **无** | ✅ |
+| 邮箱设置（过滤器、休假回复） | ❌ 范围外 | ❌ | 过滤器 | 过滤器 | ✅ | ❌ |
+| 工具数量 | 23 | 11–16 | 14（Gmail） | 30 | 64 | 11 |
+| refresh token在谁手里 | 自己 | 厂商 | 自己 | 自己 | 自己 | 自己 |
 
-[`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp) 是这一类里最完整的项目。它覆盖整个 Workspace 而不只是 Gmail，还能附上 Gmail 签名、直接从 URL 取附件，这两点 gmail-mcp 没有做。[`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp) 用 64 个工具覆盖到休假回复、代理访问和 S/MIME；这些都属于 `gmail.settings.*`，而 gmail-mcp 从不申请这个范围，所以无论授权怎么流失，它们都够不到。
+[`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp)是这里面最完整的项目。它覆盖整个Workspace，Gmail只是其中一部分，还做了两件gmail-mcp没有的事：追加Gmail签名、直接从URL拉附件。[`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp)的64个工具能碰到休假回复、委托访问和S/MIME，它们都在`gmail.settings.*`底下，而gmail-mcp从不申请这个scope，所以授权再怎么泄露都够不到那些功能。
 
-剩下的差别主要来自两处设计。用调用参数指定账号，意味着一份授权能碰到所有已连接的邮箱；把邮箱绑在连接上，参数写错也就什么都碰不到。读取那边，本机方案把每一部分都按 UTF-8 解码，ISO-2022-JP、GB2312 这类邮件会变成乱码，而 Gmail 存成附件的长正文会读出空白。
+其余差别大多来自两处设计。用调用参数路由账号，一份授权就能碰到所有已连接的邮箱；把邮箱绑在连接上，参数写错就什么都碰不到。读取这边，那几个本地服务器把所有part都按UTF-8解码：ISO-2022-JP和Shift_JIS的邮件取回来全是乱码，Gmail以附件形式存放的长邮件返回时正文为空。
 
 </details>
 
@@ -62,9 +63,9 @@
 
 ## 部署
 
-大约十分钟，多数时间花在两个网页控制台上。需要一个绑好域名的 Cloudflare 账号、[bun](https://bun.sh)，以及一个 Google 账号。
+大约十分钟。需要一个挂了域名的Cloudflare账号、[bun](https://bun.sh)和一个Google账号。
 
-### 1 · 建一个 Google OAuth 客户端
+### 1 · 创建Google OAuth客户端
 
 ```sh
 PROJECT="gmail-mcp-$(openssl rand -hex 3)"
@@ -74,137 +75,220 @@ gcloud config set project "$PROJECT"
 gcloud services enable gmail.googleapis.com
 ```
 
-接下来两步 Google 没有提供 API，只能在控制台里点：
+接下来两步Google没有开放API，只能在控制台里做：
 
-- **OAuth 同意屏幕** → *External*。应用没过审之前，把要连的邮箱都加到**测试用户**里。
-- **凭据 → 创建凭据 → OAuth 客户端 ID** → *Web 应用*，把 `https://<你的域名>/callback` 填进已获授权的重定向 URI。记下客户端 ID 和密钥。
+- **OAuth同意屏幕** → *External*。应用未通过验证期间，把计划连接的每个邮箱加进**测试用户**。
+- **凭据 → 创建凭据 → OAuth客户端ID** → *Web应用*，把`https://<你的域名>/callback`加进已获授权的重定向URI。客户端ID和密钥记下来。
 
-### 2 · 部署 Worker
+### 2 · 部署Worker
 
 ```sh
 git clone https://github.com/mkpoli/gmail-mcp && cd gmail-mcp
 bun install
-# 在 wrangler.jsonc 里把 `name` 和 routes 的 `pattern` 改成你的域名
+# 在wrangler.jsonc里把`name`和routes的`pattern`改成你的域名
 bun run setup
 ```
 
-`bun run setup` 会建好 KV 命名空间，问你要客户端 ID 和密钥，生成 Cookie 密钥，然后部署。只想换一个密钥时重跑它也没问题。
+`bun run setup`会创建KV命名空间，询问客户端ID和密钥，生成cookie密钥，然后部署。之后只为轮换某一个密钥重跑也没问题。
 
 ### 3 · 连接客户端
 
-客户端 ID 和密钥那两栏留空，MCP 客户端会自己注册。
+客户端ID和密钥两栏留空，MCP客户端会自行注册。
 
 ```sh
 claude mcp add --transport http gmail-personal https://<你的域名>/mcp
 claude mcp add --transport http gmail-work     https://<你的域名>/mcp/work
 ```
 
-在 Claude Code 里执行 `/mcp`，分别用对应的 Google 账号登录。claude.ai 那边是**设置 → 连接器 → 添加自定义连接器**，填同一个地址。`/mcp/` 后面可以跟任意一级标签，有些客户端不接受两个地址相同的服务端，这样一个部署照样能带多个邮箱。
+在Claude Code里执行`/mcp`，把每条连接登录到对应的Google账号。claude.ai里的入口是**设置 → 连接器 → 添加自定义连接器**，填同一个URL。`/mcp/`后面可以接任意单段标签；有些客户端不接受两个服务器共用一个URL，靠这个办法，一份部署照样能给它们提供多个邮箱。
 
-部署好的首页 `https://<你的域名>/` 就是这份说明。
+部署完成后，`https://<你的域名>/`本身就提供这份指南。
 
 ---
 
 ## 能做什么
 
-**读** — `whoami` · `search_messages` · `get_message` · `get_thread` · `get_attachment`
+<table>
+<tr><th align="left">📖 读</th><th align="left">✍️ 写</th><th align="left">🏷 整理</th></tr>
+<tr valign="top">
+<td>
 
-**写** — `send_message` · `reply_all` · `forward_message` · `create_draft` · `update_draft` · `send_draft` · `delete_draft` · `list_drafts`
+`whoami`<br>
+`search_messages`<br>
+`get_message`<br>
+`get_thread`<br>
+`get_attachment`
 
-**整理** — `list_labels` · `create_label` · `update_label` · `delete_label` · `modify_labels` · `modify_thread_labels` · `batch_modify_messages` · `trash_message` · `untrash_message` · `trash_thread` · `untrash_thread`
+</td>
+<td>
 
-发出去的邮件结构和普通邮件客户端一样：纯文本配一份 HTML，附件，用 `cid:` 引用的内嵌图片，嵌套成 `multipart/mixed › multipart/related › multipart/alternative`。主题和显示名走 RFC 2047，文件名走 RFC 2231，中文、日文和 emoji 都能原样送到。
+`send_message`<br>
+`reply_all`<br>
+`forward_message`<br>
+`create_draft`<br>
+`update_draft`<br>
+`send_draft`<br>
+`delete_draft`<br>
+`list_drafts`
 
-`reply_all` 读原信的 `Reply-To`、`From`、`To`、`Cc`，去掉你自己的地址，接上 `References` 链，并在纯文本和 HTML 两边都引用原文。`forward_message` 会重现转发信头，也可以把原信的附件一并带上。
+</td>
+<td>
 
-读取这边设了上限。正文和会话按字符数、附件按大小截断，一条几百封的邮件列表不会把助手的上下文塞满。
+`list_labels`<br>
+`create_label`<br>
+`update_label`<br>
+`delete_label`<br>
+`modify_labels`<br>
+`modify_thread_labels`<br>
+`batch_modify_messages`<br>
+`trash_message` · `untrash_message`<br>
+`trash_thread` · `untrash_thread`
+
+</td>
+</tr>
+</table>
+
+邮件结构和普通邮件客户端的一样：纯文本附一份HTML替代版本，文件附件，以`cid:`引用的内嵌图片，整体嵌套成`multipart/mixed › multipart/related › multipart/alternative`。主题和显示名用RFC 2047编码，文件名用RFC 2231，日文、中文、emoji都能完整送达。
+
+`reply_all`读取原信的`Reply-To`、`From`、`To`、`Cc`，去掉你自己的地址，接上`References`链，并在纯文本和HTML两个部分里都引用原文。`forward_message`复现被转发邮件的信封，还可以把原信附件重新带上。
+
+读取有意设了上限：邮件和会话正文有字符数预算，附件有大小上限，一条邮件列表里的长会话淹不掉助手的上下文。
 
 ---
 
-## 使用的技术
+## 工作原理
 
-- **[TypeScript](https://www.typescriptlang.org/) / [Cloudflare Workers](https://developers.cloudflare.com/workers/)** — 每个 MCP 会话一个 Durable Object，OAuth 授权存在 KV 里
-- **[Hono](https://hono.dev/)** — OAuth 各端点、Google 回调和 `/` 首页的路由
-- **[`@cloudflare/workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider)** — 供 MCP 客户端注册的 OAuth 2.1 服务端
-- **[`agents`](https://github.com/cloudflare/agents)** — `McpAgent`，跑在 Durable Object 上的 MCP 传输层
-- **[`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)** 配 **[Zod](https://zod.dev/)** — 工具定义和参数校验
-- **[Bun](https://bun.sh/)**、**[Biome](https://biomejs.dev/)**、**[Wrangler](https://developers.cloudflare.com/workers/wrangler/)** — 安装、测试、检查、部署
+两条OAuth流程汇在同一个Worker里。MCP客户端对Worker做认证，Worker代你对Google做认证。任何一方都不持有另一方的凭据。
 
-Gmail 本身用原生 `fetch` 直接调 [REST API](https://developers.google.com/workspace/gmail/api/reference/rest)。官方的 `googleapis` SDK 以 Node 为前提，装进 Worker 太重，所以邮件组装、MIME 解析和令牌刷新都写在 `src/gmail.ts` 和 `src/utils.ts` 里。
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as MCP客户端<br/>(Claude Code · claude.ai)
+    participant W as Worker<br/>(OAuthProvider + McpAgent)
+    participant G as Google<br/>(OAuth + Gmail API)
+
+    C->>W: POST /register（动态客户端注册）
+    C->>W: GET /authorize（PKCE质询）
+    W->>C: 批准对话框
+    C->>G: 同意屏幕，选定账号
+    G->>W: GET /callback?code=…
+    W->>W: 按已验证邮箱做允许名单检查
+    W->>G: 用code换取access token + refresh token
+    W->>C: MCP access token（Google令牌封存在授权记录里）
+    C->>W: POST /mcp，tools/call
+    W->>G: Gmail REST（按需刷新令牌）
+    G->>W: 邮件/会话/标签数据
+    W->>C: 工具结果
+```
+
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/architecture-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./docs/architecture-light.svg">
+  <img src="./docs/architecture-light.svg" alt="MCP客户端连接到你的Cloudflare Worker，再由Worker调用Gmail API" width="720">
+</picture>
+</p>
+
+| 层 | 文件 | 职责 |
+| :-- | :-- | :-- |
+| 🔐 MCP侧OAuth | [`workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider) | 动态客户端注册、PKCE；授权记录存进KV，Google令牌封存在记录里 |
+| 🔗 Google侧OAuth | `src/google-handler.ts` | 带offline access的authorization code流程、与浏览器会话绑定的一次性state、double-submit CSRF、按已验证邮箱检查允许名单 |
+| 🤖 Agent | `src/index.ts` | 每个MCP会话一个Durable Object，绑定到开启会话的账号；令牌刷新single-flight，扇出带限流 |
+| ✉️ 邮件 | `src/gmail.ts` | RFC 822组装、MIME树遍历、字符集解码、回复与转发组装 |
+
+### 使用的技术
+
+- **[TypeScript](https://www.typescriptlang.org/) + [Cloudflare Workers](https://developers.cloudflare.com/workers/)** — 每个MCP会话一个Durable Object，OAuth授权记录放在KV
+- **[Hono](https://hono.dev/)** — OAuth端点、Google回调、`/`上设置页的路由
+- **[`@cloudflare/workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider)** — 供MCP客户端注册的OAuth 2.1服务器
+- **[`agents`](https://github.com/cloudflare/agents)** — `McpAgent`，基于Durable Object的MCP传输
+- **[`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)** + **[Zod](https://zod.dev/)** — 工具定义和参数校验
+- **[Bun](https://bun.sh/)**、**[Biome](https://biomejs.dev/)**、**[Wrangler](https://developers.cloudflare.com/workers/wrangler/)** — 安装、测试、lint、部署
+
+Gmail本身用原生`fetch`直接调[REST API](https://developers.google.com/workspace/gmail/api/reference/rest)。官方`googleapis` SDK假定Node环境，带的东西远超一个Worker该装的量，所以邮件构建、MIME解析、令牌刷新都在`src/gmail.ts`和`src/utils.ts`里。
+
+### 端点
+
+| 路径 | 用途 |
+| :-- | :-- |
+| `/mcp` | MCP端点 |
+| `/mcp/<label>` | 同一个服务器挂在任意单段标签下，供那些不接受两个服务器共用URL的客户端使用 |
+| `/` | 这份设置指南 |
+| `/authorize` · `/token` · `/register` · `/callback` | OAuth机制 |
 
 ---
 
 ## 谁可以登录
 
-由 `ALLOWED_EMAILS` 决定，比对的是 Google 返回的已验证地址，在同意屏幕之后、授权发出之前判断。
+由`ALLOWED_EMAILS`决定，比对的是Google报告为已验证的地址，检查发生在用户同意之后、授权记录生成之前。
 
-| 值 | 谁能进 |
+| 值 | 谁能进来 |
 | :-- | :-- |
 | *(空)* | 谁都不行 |
-| `you@gmail.com, work@company.com` | 只有这些账号 |
-| `*@company.com` | 该域名下所有人 |
-| `*` | 任何已验证的 Google 账号 |
+| `you@gmail.com, work@company.com` | 这几个账号 |
+| `*@company.com` | 该域名下的任何人 |
+| `*` | 任何已验证的Google账号 |
 
-一份授权只能碰到通过它登录的那个邮箱，所以放宽这份名单，不会扩大已连接邮箱的可达范围。设成 `*` 之后交给陌生人的，是你这个部署和你的 Google 客户端配额，用在他们自己的邮件上。
+每份授权只能碰到用它完成认证的那个邮箱，所以放宽这份名单不会扩大已连接邮箱的可达范围。设成`*`的话，陌生人就能拿你的部署和你的Google客户端配额去处理他们自己的邮件。
 
 ---
 
 ## 限制
 
-为了不让公开的部署被用光，设了两个上限，都在 `wrangler.jsonc` 的 `vars` 里改。
+两个上限防止共用的部署被耗尽，都在`wrangler.jsonc`的`vars`下配置：
 
-| 设置 | 默认值 | 限制什么 |
+| 设置 | 默认值 | 限制的对象 |
 | :-- | :-- | :-- |
-| `MAX_ACCOUNTS` | `25` | 允许登录的 Google 账号总数。到上限后已连接的照常工作，只有新账号被拒。Google 对未审核应用的上限是 100 个用户，留在这之下。 |
-| `CALLS_PER_MINUTE` | `120` | 单个账号每分钟能调用 Gmail 的次数，跨会话合并计算。 |
+| `MAX_ACCOUNTS` | `25` | 允许完成登录的Google账号总数。到上限后已连接的账号照常工作，新账号被拒。Google对未验证应用的上限是100个用户，这个数字要压在它下面。 |
+| `CALLS_PER_MINUTE` | `120` | 单个账号每分钟可以发起的Gmail调用次数，跨它的所有会话合计。 |
 
-改完重新部署。限流由 Cloudflare 那边实现，所以 `unsafe.bindings` 里的 `limit` 要一起改成同一个值。个人使用保持默认即可。
+调高任意一个之后重新部署。限流那条还要同步更新`unsafe.bindings`块里的`limit`，Cloudflare的限流器从那里读数。单人使用的部署保持默认即可，正常助手用量离这两个上限还远。
 
 ---
 
 ## 安全
 
-自己托管只是把信任换了个地方，并没有取消它，所以这里写清楚东西都在哪。
+自托管是把信任问题挪个地方，问题本身没有消失，所以这里交代清楚每样东西放在哪。
 
-- **令牌留在你手里。** 刷新令牌加密后放在 OAuth 授权信息里，存进你自己的 KV 命名空间；有效期一小时的访问令牌放在会话的 Durable Object 里。邮件正文哪里都不存，只是流过去。
-- **一个会话对应一个邮箱。** MCP 会话绑定在开启它的账号上，拿到别人的会话 ID 也操作不了别的邮箱。
-- **授权范围压到最小。** `gmail.modify` 覆盖读取、发送、标签和回收站，不含彻底删除，也不含 `gmail.settings.*`。自动转发和过滤器外泄这两条常见后门，本来就在权限之外。
-- **恶意邮件塞不进信头。** 发信头的值拒绝 CR 和 LF，正文里藏的指令即使驱动了模型，也加不上一个隐蔽的 `Bcc`。媒体类型会校验，引用部分会做 HTML 转义。
-- **撤销是有效的。** 收紧 `ALLOWED_EMAILS` 可以挡住新的登录；在 [myaccount.google.com/connections](https://myaccount.google.com/connections) 撤销应用授权；重置 Google 客户端密钥可以一次性作废所有授权。
+- **令牌始终是你的。**refresh token加密后放在各自的OAuth授权记录里，存于你自己的KV命名空间；有效期一小时的access token放在会话的Durable Object里。邮件从不存储，只是经过。
+- **一个会话，一个邮箱。**MCP会话绑定在开启它的账号上，一个邮箱的授权没法借着别处拿来的会话ID去操作另一个邮箱。
+- **scope从简。** `gmail.modify`涵盖读取、发送、标签和回收站，不含永久删除，也不含`gmail.settings.*`。自动转发规则和过滤器外泄这两条经典的邮箱后门，都在任何被盗授权的能力之外。
+- **恶意邮件夹带不了信头。**所有出站信头的值都拒绝CR和LF，藏在正文里的指令加不进一个悄无声息的`Bcc`。媒体类型会校验，引用的原文会做HTML转义。
+- **撤销有效。**收紧`ALLOWED_EMAILS`可以挡住新登录，在[myaccount.google.com/connections](https://myaccount.google.com/connections)撤销应用授权，或者轮换Google客户端密钥让所有授权一次失效。
 
-处理请求时 Worker 会在内存里解密邮件，做中继就避不开这一点。如果某个邮箱不能接受这一条，那个账号用本机的 MCP 服务端更合适。
+Worker在处理请求期间会在内存里解密邮件，任何托管中继都得这样。如果某个邮箱连这一点都不能接受，就单独给它跑一个本地MCP服务器。
 
 ---
 
 ## 测试
 
-66 个单元测试覆盖邮件组装（MIME 嵌套、RFC 2047 折行、RFC 2231 文件名、CR/LF 拒绝、base64 换行）、跨字符集的正文提取、回复与转发的组装、Google 的令牌流程，以及登录名单的判定。
+66个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google令牌流程、登录允许名单。
 
-除此之外，每个工具都在真实的 Gmail 账号之间跑过，并由另一个账号核对收到的结果：
+除此之外，所有工具都在真实Gmail账号上跑过，再用另一个账号检查收到的东西：
 
 | 项目 | 结果 |
 | :-- | :-- |
-| 编码 | 日文主题折成多个 encoded word 后复原；emoji、ZWJ、阿拉伯语、组合符号和生僻汉字原样往返 |
-| 附件 | 名为 `请求书.csv` 的文件发出、送达、再下载后逐字节一致；`cid:` 内嵌图片在收件方显示正常 |
-| 会话 | `reply_all` 把原发件人放进收件人，保留第三方 `Cc`，去掉自己的地址，并在同一会话里引用原文 |
-| 双账号 | 两个账号同时连到一个部署；一个账号的邮件 ID 在另一个账号上返回 `404` |
-| 整理 | 建了一个嵌套的中日文标签，改名、批量应用、删除；会话和单封邮件的回收站操作都能撤回 |
-| 规模 | 一个一万五千封邮件的邮箱，用 Gmail 搜索语法和分页查询，没有触发限流 |
+| 编码 | 日文主题跨encoded word折行后正常还原；emoji、ZWJ序列、RTL阿拉伯文、组合符号、生僻CJK字符原样往返 |
+| 附件 | 名为`請求書.csv`的文件发出、送达、再下载回来，逐字节一致；`cid:`内嵌图片在收件方正常渲染 |
+| 会话归组 | `reply_all`寻址到原发件人，保留第三方的`Cc`，去掉自己的地址，在同一会话里引用了原文 |
+| 双账号 | 两个账号同时连到一份部署；一个账号的邮件ID在另一个账号上返回`404` |
+| 整理 | 建了一个嵌套的CJK标签，改名、批量套用、删除；会话和单封邮件移入回收站后都成功恢复 |
+| 规模 | 在15000封邮件的邮箱上用Gmail搜索语法加分页查询，没有触发限流 |
 
 ---
 
 ## 开发
 
 ```sh
-bun run dev     # wrangler dev，:8788
+bun run dev     # wrangler dev，端口8788
 bun run check   # biome + tsc
-bun test        # 66 个单元测试
-bun run assets  # 重新生成明暗两套配图
+bun test        # 66个单元测试
+bun run assets  # 重新生成明暗两套图示
 bun run deploy
 ```
 
 ## 许可
 
-Copyright © 2026 mkpoli，以 [MIT License](./LICENSE) 发布。
+Copyright © 2026 mkpoli。以[MIT License](./LICENSE)发布。
 
-`src/workers-oauth-utils.ts` 来自 [cloudflare/ai](https://github.com/cloudflare/ai) 的 [remote-mcp-github-oauth 示例](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth)，Copyright © 2025 Cloudflare, Inc.，依 MIT License 使用。详见 [THIRD-PARTY.md](./THIRD-PARTY.md)。
+`src/workers-oauth-utils.ts`源自[cloudflare/ai](https://github.com/cloudflare/ai)里的[remote-mcp-github-oauth示例](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth)，Copyright © 2025 Cloudflare, Inc.，依MIT License使用。见[THIRD-PARTY.md](./THIRD-PARTY.md)。

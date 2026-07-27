@@ -18,11 +18,11 @@ GmailをClaudeなどのAIアシスタントにつなぐ。複数アカウント�
 </picture>
 </p>
 
-**gmail-mcp**はGmailをClaudeをはじめとする [MCP](https://modelcontextprotocol.io/) クライアントにつなぐ。**検索と閲覧**、引用付きの**送信と全員返信**、**転送**、**添付とインライン画像**、下書き・ラベル・スレッドの操作までを、**複数のGoogleアカウントで同時に**扱える。
+**gmail-mcp**は、Claudeをはじめとする [MCP](https://modelcontextprotocol.io/) クライアントからGmailを扱えるようにする。**検索と閲覧**、引用付きの**送信と全員返信**、**転送**、**添付とインライン画像**、下書き・ラベル・スレッドの操作までを、**複数のGoogleアカウントで同時に**扱える。
 
-置き場所は**自分のCloudflare Worker**。同じ接続先に、ノートPCのClaude Codeからも、ブラウザのclaude.aiからも、スマートフォンからも届く。接続1つにつきGoogleアカウントは1つ、リフレッシュトークンは**自分の**Cloudflareアカウントから外に出ない。
+動くのは**自分のCloudflare Worker**の上。同じエンドポイントに、ノートPCのClaude Codeからも、ブラウザのclaude.aiからも、スマートフォンからもつながる。接続1つにつきGoogleアカウントは1つ、リフレッシュトークンは**自分の**Cloudflareアカウントから外に出ない。
 
-ここに来る理由はたいてい二つある。ClaudeとGoogleの公式Gmailコネクタは、読むことと下書きまではできるが**送信ができず**、アシスタント1つにつきGoogleアカウントも1つに限られる。送信できる実装の多くはローカルのプロセスで、机の前では快適でも、外出先のスマートフォンからは見えない。
+ここに来る理由はたいてい二つある。ClaudeとGoogleの公式Gmailコネクタは、読むことと下書きまではできるが**送信ができず**、アシスタント1つにつきGoogleアカウントも1つに限られる。送信できる実装の多くはローカルで動くプロセスなので、外出先のスマートフォンからは届かない。
 
 <p align="center">
 <img src="./docs/comparison.svg" alt="Gmail MCPサーバーの機能比較" width="820">
@@ -30,9 +30,9 @@ GmailをClaudeなどのAIアシスタントにつなぐ。複数アカウント�
 
 [google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp) はこの分野でもっとも完成度が高い。GmailだけでなくWorkspace全体を扱い、Gmailの署名の付加やURLからの添付取得など、gmail-mcpにない機能もある。複数アカウントの扱いは、呼び出しのたびに宛先アカウントを引数で渡す設計だ。接続そのものにメールボックスを結びつけるgmail-mcpでは、引数を間違えてもどこにも届かない。
 
-[shinzo-labs/gmail-mcp](https://github.com/shinzo-labs/gmail-mcp) のツール数は64、こちらは23。差の大半は不在応答・代理アクセス・S/MIMEといった `gmail.settings.*` の領域で、gmail-mcpはこのスコープを要求しない。権限が漏れたとしても、その範囲には手が届かない。
+[shinzo-labs/gmail-mcp](https://github.com/shinzo-labs/gmail-mcp) は64個、gmail-mcpは23個のツールを持つ。差の大半は不在通知・代理アクセス・S/MIMEといった `gmail.settings.*` 配下の機能で、gmail-mcpはこのスコープを要求しない。認可情報が漏れても、メールボックスの設定には手が届かない。
 
-読み取り側にも差が出る。ローカル型のサーバーはどのパートもUTF-8として復号するため、ISO-2022-JPやShift_JISのメールは文字化けし、Gmailが添付として保管する長文の本文は空で返ってくる。
+読み取り側にも差が出る。ローカル型のサーバーはすべてのMIMEパートをUTF-8として復号するため、ISO-2022-JPやShift_JISのメールは文字化けする。Gmailが添付データとして返す長い本文も、空のまま返ってくる。
 
 ---
 
@@ -91,7 +91,7 @@ Claude Codeなら `/mcp` を実行して、それぞれを対応するGoogleア�
 
 `reply_all` は元メールの `Reply-To`・`From`・`To`・`Cc` を読み、自分のアドレスを除いて宛先を組み立て、`References` の連鎖を引き継ぎ、本文をテキストとHTMLの両方で引用する。`forward_message` は転送元のヘッダを再現し、元の添付ファイルをそのまま付け直せる。
 
-読み取り側には上限を設けてある。本文とスレッドには文字数、添付にはサイズの上限があり、長大なメーリングリストのスレッドがアシスタントの文脈を埋め尽くすことはない。
+読み取り側には上限を設けてある。本文とスレッドには文字数、添付ファイルにはサイズの上限があり、長いメーリングリストのスレッドがアシスタントのコンテキストを圧迫することはない。
 
 ---
 
@@ -104,7 +104,7 @@ Claude Codeなら `/mcp` を実行して、それぞれを対応するGoogleア�
 - **[`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)** と **[Zod](https://zod.dev/)** — ツール定義と引数の検証
 - **[Bun](https://bun.sh/)**・**[Biome](https://biomejs.dev/)**・**[Wrangler](https://developers.cloudflare.com/workers/wrangler/)** — 導入、テスト、静的解析、デプロイ
 
-Gmail自体は [REST API](https://developers.google.com/workspace/gmail/api/reference/rest) を素の `fetch` で呼ぶ。公式の `googleapis` SDKはNodeを前提とし、Workerに載せるには重すぎる。メールの組み立て、MIMEの解析、トークンの更新は `src/gmail.ts` と `src/utils.ts` に置いてある。
+Gmailへのアクセスは [REST API](https://developers.google.com/workspace/gmail/api/reference/rest) を `fetch` で直接叩いている。公式の `googleapis` SDKはNode.jsが前提で、Workerに載せるには依存が大きい。メールの組み立て、MIMEの解析、トークンの更新は `src/gmail.ts` と `src/utils.ts` に置いてある。
 
 ---
 
@@ -119,7 +119,7 @@ Gmail自体は [REST API](https://developers.google.com/workspace/gmail/api/refe
 | `*@company.com` | そのドメインの全員 |
 | `*` | 確認済みのGoogleアカウントすべて |
 
-発行された権限は、その認証を通したメールボックスにしか届かない。したがってこの一覧を広げても、すでにつながっているメールボックスへの到達範囲が広がることはない。`*` にした場合に他人へ渡るのは、自分のデプロイとGoogleクライアントの割り当て量を、その人自身のメールのために使わせることだ。
+認可情報は、認証したメールボックスにだけ紐づく。この一覧を広げても、すでにつながっているメールボックスへのアクセス範囲は変わらない。`*` を指定すると、第三者が自分のメールを扱うために、このデプロイとGoogle OAuthクライアントのクォータを使えるようになる。
 
 ---
 
@@ -138,12 +138,12 @@ Gmail自体は [REST API](https://developers.google.com/workspace/gmail/api/refe
 
 ## セキュリティ
 
-自分で運用するという選択は、信頼の置き場所を移すだけで、なくすわけではない。だから何がどこにあるかを書いておく。
+自分で運用しても信頼はゼロにならず、預け先が変わるだけになる。何がどこに置かれるかを書いておく。
 
 - **トークンは自分の手元に残る。**リフレッシュトークンはOAuthの権限情報の中で暗号化され、自分のKV名前空間に入る。有効期間1時間のアクセストークンはセッションのDurable Objectに置かれる。メール本文はどこにも保存されない。通過するだけだ。
 - **1セッションにつき1メールボックス。**MCPセッションは、それを開いたアカウントに結びつく。他人のセッションIDを借りても、別のメールボックスは操作できない。
-- **スコープを絞る。** `gmail.modify` が覆うのは読み取り・送信・ラベル・ゴミ箱まで。完全削除と `gmail.settings.*` は含まれない。自動転送やフィルタによる持ち出しという、乗っ取り後の定番の裏口が、そもそも権限の外にある。
-- **悪意あるメールからヘッダを注入されない。**送信ヘッダの値はCRとLFを拒否する。本文に仕込まれた指示がモデルを動かしても、こっそり `Bcc` を足すことはできない。引用部分はHTMLエスケープを通る。
+- **スコープを絞る。** `gmail.modify` で許可されるのは、閲覧・送信・ラベル操作・ゴミ箱への移動まで。完全削除と `gmail.settings.*` 配下は含まれない。乗っ取り後によく使われる自動転送やフィルタの作成は、そもそも権限の外にある。
+- **ヘッダインジェクションを防ぐ。**送信ヘッダの値にCRやLFが含まれていれば拒否する。本文に仕込まれたプロンプトインジェクションにモデルが従ったとしても、`Bcc` を足すことはできない。引用部分はHTMLエスケープする。
 - **取り消しが効く。**新規のサインインを止めるなら `ALLOWED_EMAILS` を狭める。[myaccount.google.com/connections](https://myaccount.google.com/connections) でアプリのアクセスを取り消す。すべての権限を一度に無効化したいならGoogleのクライアントシークレットを再生成する。
 
 なお、リクエストを処理する間、Workerはメールをメモリ上で復号する。中継する以上これは避けられない。特定のメールボックスについてそれが許容できないなら、そのアカウントだけはローカルのMCPサーバーを使うほうがいい。

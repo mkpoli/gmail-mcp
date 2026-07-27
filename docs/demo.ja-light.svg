@@ -82,8 +82,8 @@
     <animateTransform attributeName="transform" type="translate" values="0 10;0 10;0 0;0 0;0 0;0 0" keyTimes="0;0.23;0.25;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
     <rect class="bubble" x="24" y="210" width="404" height="86" rx="14"/>
     <text class="ui msg" x="44" y="236">今日中に返信が必要なものが2件です。</text>
-    <text class="ui msg" x="44" y="259" fill-opacity="0.85">・丸山商事：発注書No.4417の承認待ち <tspan class="mono" font-size="11.5" fill-opacity="0.55">work</tspan></text>
-    <text class="ui msg" x="44" y="281" fill-opacity="0.85">・マンションの更新手続き、金曜締切 <tspan class="mono" font-size="11.5" fill-opacity="0.55">personal</tspan></text>
+    <text class="ui msg" x="44" y="259" fill-opacity="0.85">・丸山商事：発注書No.4417の承認待ち<tspan dx="6"  class="mono" font-size="11.5" fill-opacity="0.55">work</tspan></text>
+    <text class="ui msg" x="44" y="281" fill-opacity="0.85">・マンションの更新手続き、金曜締切<tspan dx="6"  class="mono" font-size="11.5" fill-opacity="0.55">personal</tspan></text>
   </g>
 
   <!-- 5 · user asks for a reply with an attachment -->
@@ -116,7 +116,7 @@
     <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.58;0.60;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
     <animateTransform attributeName="transform" type="translate" values="0 10;0 10;0 0;0 0;0 0;0 0" keyTimes="0;0.58;0.60;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
     <rect class="bubble" x="24" y="428" width="424" height="64" rx="14"/>
-    <text class="ui msg" x="44" y="454">仕事用アドレスから返信しました。経理宛、</text>
-    <text class="ui msg" x="44" y="476">購買はCcのまま、押印済みPDFを添付。</text>
+    <text class="ui msg" x="44" y="454">仕事用アドレスから経理宛に返信しました。</text>
+    <text class="ui msg" x="44" y="476">購買はCcに残し、押印済みPDFを添付。</text>
   </g>
 </svg>
