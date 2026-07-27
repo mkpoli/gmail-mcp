@@ -3,7 +3,8 @@
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
-[![23 tools](https://img.shields.io/badge/tools-23-0b7285)](#-できること)
+[![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
+[![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#-できること)
 [![tests](https://img.shields.io/badge/tests-66_passing-success?logo=bun&logoColor=white)](#-テスト)
 
 *[English README](./README.md) · [简体中文](./README.zh.md)*
@@ -30,17 +31,17 @@
 
 **整理する** — `list_labels` · `create_label` · `update_label` · `delete_label` · `modify_labels` · `modify_thread_labels` · `batch_modify_messages` · `trash_message` · `untrash_message` · `trash_thread` · `untrash_thread`
 
-送信するメールの構造は、通常のメールクライアントが組み立てるものと同じです。プレーンテキストにHTML版を添え、ファイルを添付し、`cid:`で参照するインライン画像を埋め込みます。入れ子は`multipart/mixed › multipart/related › multipart/alternative`になります。件名と表示名はRFC 2047、ファイル名はRFC 2231で符号化するので、日本語も中国語も絵文字もそのまま届きます。
+送信するメールの構造は、通常のメールクライアントが組み立てるものと同じです。プレーンテキストにHTML版を添え、ファイルを添付し、`cid:`で参照するインライン画像を埋め込みます。入れ子は`multipart/mixed › multipart/related › multipart/alternative`になります。件名と表示名はRFC 2047、ファイル名はRFC 2231で符号化するので、日本語、中国語、絵文字も文字化けせずに送受信できます。
 
-`reply_all`は元メールの`Reply-To`・`From`・`To`・`Cc`を読み、自分のアドレスを除いて宛先を組み立て、`References`の連鎖を引き継ぎ、本文をテキストとHTMLの両方で引用します。`forward_message`では転送元のヘッダを再現し、元の添付ファイルをそのまま付け直せます。
+`reply_all`は元メールの`Reply-To`・`From`・`To`・`Cc`を読み、自分のアドレスを除いて宛先を組み立て、`References`の連鎖を引き継ぎ、送信する形式に合わせて原文を引用します。`forward_message`では元メールのヘッダを再現し、添付ファイルを引き継いで転送できます。
 
-読み取り側には上限を設けてあります。本文とスレッドには文字数、添付ファイルにはサイズの上限があり、長いメーリングリストのスレッドがアシスタントのコンテキストを圧迫することはありません。
+読み取りにも上限があります。本文とスレッドの取得には文字数の上限、添付ファイルの取得にはサイズの上限を設けているので、長いメーリングリストのスレッドがアシスタントのコンテキストを圧迫することはありません。
 
 ---
 
 ## 🚀 導入
 
-所要時間は10分ほどです。独自ドメインを設定したCloudflareアカウントと、[bun](https://bun.sh)、Googleアカウントを用意してください。
+所要時間は10分ほどです。独自ドメインを設定したCloudflareアカウント、[Bun](https://bun.sh)、Googleアカウントを用意してください。
 
 ### 1. Google OAuthクライアントを作る
 
@@ -52,10 +53,10 @@ gcloud config set project "$PROJECT"
 gcloud services enable gmail.googleapis.com
 ```
 
-続く2つの手順にAPIは用意されていないので、[Google Cloudコンソール](https://console.cloud.google.com/)で操作してください。
+以下の2項目には設定用のAPIがないため、[Google Cloudコンソール](https://console.cloud.google.com/)で操作してください。
 
-- [**OAuth同意画面**](https://console.cloud.google.com/auth/overview) → *External*。審査前の状態では、接続したいメールアドレスを**テストユーザー**に登録します。
-- [**認証情報**](https://console.cloud.google.com/apis/credentials) **→ 認証情報を作成 → OAuthクライアントID** → *ウェブアプリケーション*。承認済みリダイレクトURIに`https://<自分のドメイン>/callback`を追加し、クライアントIDとシークレットを控えておきます。
+- [**OAuth同意画面**](https://console.cloud.google.com/auth/overview)で、ユーザーの種類に*External*を選びます。審査が完了するまでは、接続するGoogleアカウントを**テストユーザー**に登録します。
+- [**認証情報**](https://console.cloud.google.com/apis/credentials) **→ 認証情報を作成 → OAuthクライアントID** → *ウェブアプリケーション*。承認済みのリダイレクトURIに`https://<自分のドメイン>/callback`を追加し、クライアントIDとシークレットを控えておきます。
 
 ### 2. Workerをデプロイする
 
@@ -96,11 +97,11 @@ Claude Codeでは`/mcp`を実行し、接続ごとに対応するGoogleアカウ
 | `*@company.com` | そのドメインのアカウント |
 | `*` | 確認済みのGoogleアカウントすべて |
 
-認可情報は、認証したメールボックスにだけ紐づきます。この一覧を広げても、すでに接続しているメールボックスへのアクセス範囲は変わりません。`*`を指定すると、第三者が自分のメールを扱うために、このデプロイとGoogle OAuthクライアントのクォータを使えるようになります。
+認可情報は、サインインに使ったGoogleアカウントにだけ紐づきます。`ALLOWED_EMAILS`の許可範囲を広げても、既存の接続からアクセスできるアカウントは増えません。`*`を指定すると、第三者が自分のメールを扱うために、このデプロイとGoogle OAuthクライアントのクォータを使えるようになります。
 
 ### 上限
 
-共有で公開したときに使い切られないよう、2つの上限を設けてあります。どちらも`wrangler.jsonc`の`vars`で変更できます。
+第三者に公開した場合に利用枠を使い切られないよう、2つの上限を設けています。どちらも`wrangler.jsonc`の`vars`で変更できます。
 
 | 設定 | 既定値 | 制限する対象 |
 | :-- | :-- | :-- |
@@ -113,7 +114,7 @@ Claude Codeでは`/mcp`を実行し、接続ごとに対応するGoogleアカウ
 
 ## 🏗 仕組み
 
-2つのOAuthフローが1つのWorkerの中で合流します。MCPクライアントはWorkerに対して認証し、Workerはユーザーに代わってGoogleに対して認証します。どちらの側も、もう一方の認証情報を持ちません。
+1つのWorkerで2つのOAuthフローを処理します。MCPクライアントはWorkerに接続するための認証を受け、WorkerはGoogleからメールボックスへのアクセス認可を受けます。MCPクライアントにGoogleのトークンは渡らず、GoogleにMCP側の認証情報は渡りません。
 
 ```mermaid
 sequenceDiagram
@@ -160,7 +161,7 @@ sequenceDiagram
 - **[`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)**と**[Zod](https://zod.dev/)** — ツール定義と引数の検証
 - **[Bun](https://bun.sh/)**・**[Biome](https://biomejs.dev/)**・**[Wrangler](https://developers.cloudflare.com/workers/wrangler/)** — 導入、テスト、静的解析、デプロイ
 
-GmailへのアクセスにはREST APIを`fetch`で直接呼び出しています。公式の`googleapis` SDKはNode.jsが前提で、Workerに載せるには依存が大きいため、メールの組み立て、MIMEの解析、トークンの更新は`src/gmail.ts`と`src/utils.ts`に実装しています。
+Gmailへのアクセスには[REST API](https://developers.google.com/workspace/gmail/api/reference/rest)を`fetch`で直接呼び出しています。公式の`googleapis` SDKはNode.jsが前提で、Workerに載せるには依存が大きいため、メールの組み立て、MIMEの解析、トークンの更新は`src/gmail.ts`と`src/utils.ts`に実装しています。
 
 ### エンドポイント
 
@@ -175,13 +176,13 @@ GmailへのアクセスにはREST APIを`fetch`で直接呼び出しています
 
 ## 🔒 セキュリティ
 
-自分で運用しても信頼はゼロにはならず、預け先が変わります。何がどこに置かれるかを書いておきます。
+自分で運用する場合も、CloudflareやGoogleへの信頼は必要です。トークンとメール本文の保存先を以下に示します。
 
 - **トークンは自分の手元に残ります。**リフレッシュトークンはOAuthの認可情報の中で暗号化され、自分のKV名前空間に入ります。有効期間1時間のアクセストークンは、セッションのDurable Objectに置かれます。メール本文はどこにも保存されず、通過するだけです。
 - **1セッションにつき1メールボックスです。**MCPセッションは、それを開いたアカウントに紐づきます。他人のセッションIDを使っても、別のメールボックスは操作できません。
 - **スコープを絞っています。** `gmail.modify`で許可されるのは、閲覧・送信・ラベル操作・ゴミ箱への移動までです。完全削除と`gmail.settings.*`配下は含まれません。乗っ取り後によく使われる自動転送やフィルタの作成は、そもそも権限の外にあります。
-- **ヘッダインジェクションを防ぎます。**送信ヘッダの値にCRやLFが含まれていれば拒否します。本文に仕込まれたプロンプトインジェクションにモデルが従っても、`Bcc`を足すことはできません。引用部分はHTMLエスケープを通します。
-- **取り消しが効きます。**新規のサインインを止めるなら`ALLOWED_EMAILS`を狭めます。[myaccount.google.com/connections](https://myaccount.google.com/connections)でアプリのアクセスを取り消すか、Googleのクライアントシークレットを再生成すると、すべての認可情報を一度に無効化できます。
+- **ヘッダインジェクションを防ぎます。**送信ヘッダの値にCR、LF、NULが含まれている場合は拒否するので、改行を挟んで別のヘッダを差し込む攻撃はできません。件名の中に`Bcc`を紛れ込ませる、といった手口が該当します。メディアタイプも検証し、引用部分はHTMLエスケープします。ただし引数そのものは制限しません。`bcc`は正規のパラメータなので、本文に仕込まれた指示にモデルが従えば指定される可能性は残り、そこはクライアント側の確認画面が歯止めになります。
+- **アクセスを無効化できます。**新規のサインインを止めるには、`ALLOWED_EMAILS`の許可範囲を狭めます。特定のアカウントからのアクセスは、[myaccount.google.com/connections](https://myaccount.google.com/connections)で取り消せます。すべての認可情報を一度に無効化する場合は、Googleのクライアントシークレットを再生成します。
 
 リクエストを処理する間、Workerはメールをメモリ上で復号します。中継する以上、これは避けられません。特定のメールボックスでそれが許容できない場合は、そのアカウントだけローカルのMCPサーバーを使うほうが適しています。
 

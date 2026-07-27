@@ -12,7 +12,7 @@
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
-[![23 tools](https://img.shields.io/badge/tools-23-0b7285)](#what-it-can-do)
+[![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#what-it-can-do)
 [![tests](https://img.shields.io/badge/tests-66_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
 
 *[日本語版](./README.ja.md) · [简体中文](./README.zh.md)*
@@ -58,7 +58,7 @@ Two things push people here. The Gmail connectors built into Claude and Google r
 | Honors each part's charset | ✅ | — | ❌ UTF-8 assumed | ❌ UTF-8 assumed | ❌ | ❌ |
 | Rejects CRLF header injection | ✅ | — | ✅ framework | ✅ strips | ❌ **none** | ✅ |
 | Mailbox settings (filters, vacation) | ❌ out of scope | ❌ | filters | filters | ✅ | ❌ |
-| Tool count | 23 | 11–16 | 14 (Gmail) | 30 | 64 | 11 |
+| Tool count | 24 | 11–16 | 14 (Gmail) | 30 | 64 | 11 |
 | Who holds your refresh token | you | vendor | you | you | you | you |
 
 [`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp) is the most complete project here. It covers all of Workspace rather than Gmail alone, and it appends your Gmail signature and pulls attachments straight from a URL, neither of which gmail-mcp does. [`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp) reaches vacation responders, delegates, and S/MIME through its 64 tools; those live under `gmail.settings.*`, a scope gmail-mcp never requests, so they stay beyond its reach whatever happens to a grant.
@@ -158,7 +158,7 @@ Your deployment serves this guide at `https://<your-domain>/`.
 
 Messages leave the way a mail client sends them: plain text with an HTML alternative, file attachments, and inline images referenced by `cid:`, nested as `multipart/mixed › multipart/related › multipart/alternative`. Subjects and display names use RFC 2047, filenames use RFC 2231, so Japanese, Chinese, and emoji survive the trip.
 
-`reply_all` reads the original's `Reply-To`, `From`, `To`, and `Cc`, drops your own address, carries the `References` chain, and quotes the original in both parts. `forward_message` reproduces the forwarded envelope and can re-attach the original's files.
+`reply_all` reads the original's `Reply-To`, `From`, `To`, and `Cc`, drops your own address, carries the `References` chain, and quotes the original in whichever parts you send. `forward_message` reproduces the forwarded envelope and can re-attach the original's files.
 
 Reading is bounded on purpose: message and thread bodies have character budgets and attachments a size ceiling, so a mailing-list thread cannot flood the assistant's context.
 
@@ -264,8 +264,8 @@ Self-hosting moves the trust question rather than removing it, so here is where 
 - **Your tokens stay yours.** Refresh tokens are encrypted inside their OAuth grant in your KV namespace; the hour-lived access token lives in the session's Durable Object. Mail is never stored — it passes through.
 - **One session, one mailbox.** The MCP session is bound to the account that opened it, so a grant for one mailbox cannot act on another through a borrowed session id.
 - **Scope minimalism.** `gmail.modify` covers reading, sending, labels, and trash. It excludes permanent deletion and all of `gmail.settings.*`, keeping auto-forwarding rules and filter exfiltration — the classic mailbox backdoors — outside what any stolen grant could do.
-- **Hostile mail cannot smuggle headers.** Every outgoing header value rejects CR and LF, so an instruction hidden in a message body cannot add a silent `Bcc`. Media types are validated, and quoted history is HTML-escaped.
-- **Revoking works.** Narrow `ALLOWED_EMAILS` to stop new sign-ins, revoke at [myaccount.google.com/connections](https://myaccount.google.com/connections), or rotate the Google client secret to invalidate every grant at once.
+- **Headers cannot be smuggled.** Every outgoing header value is rejected if it contains CR, LF or NUL, so no argument can break out of its own field to append one — a `Bcc` inside a subject line, say. Media types are validated, and quoted history is HTML-escaped. What this does not do is police the arguments themselves: `bcc` is a real parameter, so a model acting on an instruction hidden in a message body could still fill it in, and your client's approval prompt remains the check on that.
+- **Access can be withdrawn.** Narrowing `ALLOWED_EMAILS` stops new sign-ins. A single account's access is revoked at [myaccount.google.com/connections](https://myaccount.google.com/connections). Rotating the Google client secret invalidates every grant at once.
 
 The Worker decrypts mail in memory while serving a request, as any hosted relay must. If that is unacceptable for a particular mailbox, run a local MCP server for that one.
 

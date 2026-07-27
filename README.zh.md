@@ -4,7 +4,7 @@
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
-[![23 tools](https://img.shields.io/badge/tools-23-0b7285)](#能做什么)
+[![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#能做什么)
 [![tests](https://img.shields.io/badge/tests-66_passing-success?logo=bun&logoColor=white)](#测试)
 
 *[English README](./README.md) · [日本語版](./README.ja.md)*
@@ -46,7 +46,7 @@
 | 按part声明的字符集解码 | ✅ | — | ❌ 假定UTF-8 | ❌ 假定UTF-8 | ❌ | ❌ |
 | 拒绝CRLF头注入 | ✅ | — | ✅ 框架层 | ✅ 剥离 | ❌ **无** | ✅ |
 | 邮箱设置（过滤器、休假回复） | ❌ 范围外 | ❌ | 过滤器 | 过滤器 | ✅ | ❌ |
-| 工具数量 | 23 | 11–16 | 14（Gmail） | 30 | 64 | 11 |
+| 工具数量 | 24 | 11–16 | 14（Gmail） | 30 | 64 | 11 |
 | refresh token在谁手里 | 自己 | 厂商 | 自己 | 自己 | 自己 | 自己 |
 
 [`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp)是这里面最完整的项目。它覆盖整个Workspace，Gmail只是其中一部分，还做了两件gmail-mcp没有的事：追加Gmail签名、直接从URL拉附件。[`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp)的64个工具能碰到休假回复、委托访问和S/MIME，它们都在`gmail.settings.*`底下，而gmail-mcp从不申请这个scope，所以授权再怎么泄露都够不到那些功能。
@@ -146,7 +146,7 @@ claude mcp add --transport http gmail-work     https://<你的域名>/mcp/work
 
 邮件结构和普通邮件客户端的一样：纯文本附一份HTML替代版本，文件附件，以`cid:`引用的内嵌图片，整体嵌套成`multipart/mixed › multipart/related › multipart/alternative`。主题和显示名用RFC 2047编码，文件名用RFC 2231，日文、中文、emoji都能完整送达。
 
-`reply_all`读取原信的`Reply-To`、`From`、`To`、`Cc`，去掉你自己的地址，接上`References`链，并在纯文本和HTML两个部分里都引用原文。`forward_message`复现被转发邮件的信封，还可以把原信附件重新带上。
+`reply_all`读取原信的`Reply-To`、`From`、`To`、`Cc`，去掉你自己的地址，接上`References`链，并按你发送的格式引用原文。`forward_message`复现被转发邮件的信封，还可以把原信附件重新带上。
 
 读取有意设了上限：邮件和会话正文有字符数预算，附件有大小上限，一条邮件列表里的长会话淹不掉助手的上下文。
 
@@ -249,7 +249,7 @@ Gmail本身用原生`fetch`直接调[REST API](https://developers.google.com/wor
 - **令牌始终是你的。**refresh token加密后放在各自的OAuth授权记录里，存于你自己的KV命名空间；有效期一小时的access token放在会话的Durable Object里。邮件从不存储，只是经过。
 - **一个会话，一个邮箱。**MCP会话绑定在开启它的账号上，一个邮箱的授权没法借着别处拿来的会话ID去操作另一个邮箱。
 - **scope从简。** `gmail.modify`涵盖读取、发送、标签和回收站，不含永久删除，也不含`gmail.settings.*`。自动转发规则和过滤器外泄这两条经典的邮箱后门，都在任何被盗授权的能力之外。
-- **恶意邮件夹带不了信头。**所有出站信头的值都拒绝CR和LF，藏在正文里的指令加不进一个悄无声息的`Bcc`。媒体类型会校验，引用的原文会做HTML转义。
+- **信头夹带不进去。**所有出站信头的值只要含CR、LF或NUL就会被拒绝，参数没法越出自己的字段去追加一个信头，比如在主题里塞一个`Bcc`。媒体类型会校验，引用的原文会做HTML转义。但这不管参数本身：`bcc`是正经参数，模型如果听了正文里藏的指令，还是可能填进去，这一层由客户端的确认弹窗来把关。
 - **撤销有效。**收紧`ALLOWED_EMAILS`可以挡住新登录，在[myaccount.google.com/connections](https://myaccount.google.com/connections)撤销应用授权，或者轮换Google客户端密钥让所有授权一次失效。
 
 Worker在处理请求期间会在内存里解密邮件，任何托管中继都得这样。如果某个邮箱连这一点都不能接受，就单独给它跑一个本地MCP服务器。
