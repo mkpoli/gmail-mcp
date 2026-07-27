@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img"
+     aria-label="Gmail MCP feature comparison">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="0.55" stop-color="#12263f"/>
+      <stop offset="1" stop-color="#0e3033"/>
+    </linearGradient>
+    <linearGradient id="mine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F6821F" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F6821F" stop-opacity="0.05"/>
+    </linearGradient>
+    <style>
+      text { fill: #ffffff; }
+      .ja { font-family: "Noto Sans CJK JP", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; }
+      .en { font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 14px; fill-opacity: 0.55; }
+      .head { font-size: 24px; font-weight: 700; }
+      .headsub { font-size: 13px; fill-opacity: 0.6; }
+      .row { font-size: 21px; font-weight: 600; }
+      .rowsub { font-size: 12.5px; fill-opacity: 0.5; }
+      .mark { font-size: 27px; font-weight: 700; }
+      .word { font-size: 19px; font-weight: 600; }
+      .note { font-size: 12px; fill-opacity: 0.6; }
+      .foot { font-size: 13px; fill-opacity: 0.45; }
+      .grid { stroke: #ffffff; stroke-opacity: 0.15; stroke-width: 1; }
+      .yes { fill: #4ade80; }
+      .no { fill: #f87171; }
+      .part { fill: #fbbf24; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="675" fill="url(#bg)"/>
+
+  <text class="ja title" x="60" y="56">Gmail MCP 機能比較</text>
+  <text class="en subtitle" x="60" y="80">github.com/mkpoli/gmail-mcp — self-hosted on Cloudflare Workers</text>
+
+  <rect x="394" y="100" width="194" height="522" rx="8" fill="url(#mine)" stroke="#F6821F" stroke-opacity="0.45" stroke-width="1.5"/>
+
+  <text class="en head" x="491" y="138" text-anchor="middle">gmail-mcp</text>
+  <text class="ja headsub" x="491" y="159" text-anchor="middle">本プロジェクト</text>
+
+  <text class="ja head" x="686" y="138" text-anchor="middle">公式コネクタ</text>
+  <text class="en headsub" x="686" y="159" text-anchor="middle">Claude · Google</text>
+
+  <text class="ja head" x="882" y="138" text-anchor="middle">既存セルフホスト</text>
+  <text class="en headsub" x="882" y="159" text-anchor="middle">shinzo-labs 等</text>
+
+  <text class="ja head" x="1078" y="138" text-anchor="middle">ローカル stdio</text>
+  <text class="en headsub" x="1078" y="159" text-anchor="middle">local MCP</text>
+
+  <line class="grid" x1="60" y1="174" x2="1140" y2="174"/>
+  <line class="grid" x1="394" y1="100" x2="394" y2="622"/>
+  <line class="grid" x1="588" y1="100" x2="588" y2="622"/>
+  <line class="grid" x1="784" y1="100" x2="784" y2="622"/>
+  <line class="grid" x1="980" y1="100" x2="980" y2="622"/>
+
+  <!-- 1 · multi-account -->
+  <line class="grid" x1="60" y1="248" x2="1140" y2="248"/>
+  <text class="ja row" x="60" y="206">複数アカウント同時接続</text>
+  <text class="en rowsub" x="60" y="227">several mailboxes at once</text>
+  <text class="en mark yes" x="491" y="212" text-anchor="middle">✓</text>
+  <text class="ja note" x="491" y="233" text-anchor="middle">接続ごとに1つ</text>
+  <text class="en mark no" x="686" y="220" text-anchor="middle">✕</text>
+  <text class="en mark part" x="882" y="220" text-anchor="middle">△</text>
+  <text class="en mark part" x="1078" y="220" text-anchor="middle">△</text>
+
+  <!-- 2 · send -->
+  <line class="grid" x1="60" y1="322" x2="1140" y2="322"/>
+  <text class="ja row" x="60" y="280">メール送信・全員に返信</text>
+  <text class="en rowsub" x="60" y="301">send · reply_all with quoting</text>
+  <text class="en mark yes" x="491" y="294" text-anchor="middle">✓</text>
+  <text class="en mark no" x="686" y="286" text-anchor="middle">✕</text>
+  <text class="ja note" x="686" y="307" text-anchor="middle">閲覧と下書きのみ</text>
+  <text class="en mark yes" x="882" y="294" text-anchor="middle">✓</text>
+  <text class="en mark yes" x="1078" y="294" text-anchor="middle">✓</text>
+
+  <!-- 3 · attachments -->
+  <line class="grid" x1="60" y1="396" x2="1140" y2="396"/>
+  <text class="ja row" x="60" y="354">添付・インライン画像</text>
+  <text class="en rowsub" x="60" y="375">attachments · cid: inline images</text>
+  <text class="en mark yes" x="491" y="368" text-anchor="middle">✓</text>
+  <text class="en mark no" x="686" y="368" text-anchor="middle">✕</text>
+  <text class="en mark yes" x="882" y="368" text-anchor="middle">✓</text>
+  <text class="en mark part" x="1078" y="368" text-anchor="middle">△</text>
+
+  <!-- 4 · remote -->
+  <line class="grid" x1="60" y1="470" x2="1140" y2="470"/>
+  <text class="ja row" x="60" y="428">スマホ・Web から利用</text>
+  <text class="en rowsub" x="60" y="449">remote — phone and browser</text>
+  <text class="en mark yes" x="491" y="442" text-anchor="middle">✓</text>
+  <text class="en mark yes" x="686" y="442" text-anchor="middle">✓</text>
+  <text class="en mark part" x="882" y="434" text-anchor="middle">△</text>
+  <text class="ja note" x="882" y="455" text-anchor="middle">要サーバー構築</text>
+  <text class="en mark no" x="1078" y="442" text-anchor="middle">✕</text>
+
+  <!-- 5 · setup -->
+  <line class="grid" x1="60" y1="544" x2="1140" y2="544"/>
+  <text class="ja row" x="60" y="502">導入の手軽さ</text>
+  <text class="en rowsub" x="60" y="523">setup effort</text>
+  <text class="ja word yes" x="491" y="510" text-anchor="middle">約10分</text>
+  <text class="en note" x="491" y="530" text-anchor="middle">bun run setup</text>
+  <text class="ja word yes" x="686" y="516" text-anchor="middle">即時</text>
+  <text class="ja word part" x="882" y="510" text-anchor="middle">サーバー運用</text>
+  <text class="en note" x="882" y="530" text-anchor="middle">VPS · Docker</text>
+  <text class="ja word yes" x="1078" y="516" text-anchor="middle">簡単</text>
+
+  <!-- 6 · token custody -->
+  <line class="grid" x1="60" y1="618" x2="1140" y2="618"/>
+  <text class="ja row" x="60" y="576">トークンの保持者</text>
+  <text class="en rowsub" x="60" y="597">who holds your refresh token</text>
+  <text class="ja word yes" x="491" y="584" text-anchor="middle">自分</text>
+  <text class="en note" x="491" y="604" text-anchor="middle">your Worker</text>
+  <text class="ja word" x="686" y="584" text-anchor="middle">事業者</text>
+  <text class="en note" x="686" y="604" text-anchor="middle">Google · Anthropic</text>
+  <text class="ja word yes" x="882" y="584" text-anchor="middle">自分</text>
+  <text class="ja word yes" x="1078" y="590" text-anchor="middle">自分の端末</text>
+
+  <text class="en foot" x="60" y="650">22 tools · OAuth 2.1 + PKCE · scope gmail.modify · MIT</text>
+  <text class="en foot" x="1140" y="650" text-anchor="end">gmail-mcp</text>
+</svg>

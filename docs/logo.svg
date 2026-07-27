@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 132" width="520" height="132" role="img" aria-label="gmail-mcp">
+  <defs>
+    <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6821F"/>
+      <stop offset="1" stop-color="#E8590C"/>
+    </linearGradient>
+    <linearGradient id="cool" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6E56CF"/>
+      <stop offset="1" stop-color="#3E63DD"/>
+    </linearGradient>
+    <linearGradient id="sweep" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F6821F" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#F6821F" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#6E56CF" stop-opacity="0"/>
+      <animateTransform attributeName="gradientTransform" type="translate"
+                        values="-1 0; 1 0; -1 0" dur="6s" repeatCount="indefinite"/>
+    </linearGradient>
+  </defs>
+
+  <!-- envelope -->
+  <g transform="translate(24 28)">
+    <rect x="0" y="0" width="92" height="66" rx="12" fill="none" stroke="url(#warm)" stroke-width="4"/>
+    <path d="M4 10 L46 42 L88 10" fill="none" stroke="url(#warm)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- pulse: a message moving through -->
+    <circle r="4.5" fill="url(#cool)">
+      <animateMotion path="M4 10 L46 42 L88 10" dur="3.2s" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="linear"/>
+      <animate attributeName="opacity" values="0;1;1;0" dur="3.2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- wordmark -->
+  <text x="140" y="72" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+        font-size="46" font-weight="700" letter-spacing="-1" fill="currentColor">gmail<tspan fill="url(#warm)">-</tspan>mcp</text>
+  <text x="142" y="100" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="14" fill="currentColor" opacity="0.62">remote MCP server · Cloudflare Workers</text>
+
+  <!-- animated underline -->
+  <rect x="142" y="110" width="330" height="3" rx="1.5" fill="currentColor" opacity="0.12"/>
+  <rect x="142" y="110" width="330" height="3" rx="1.5" fill="url(#sweep)"/>
+</svg>

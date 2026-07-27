@@ -141,5 +141,6 @@ export async function fetchGoogleUserInfo(accessToken: string) {
 	if (!info.email || typeof info.email !== "string") {
 		throw new Error("userinfo returned no email");
 	}
-	return { email: info.email, verified: info.verified_email !== false, name: info.name };
+	// Only an explicit true counts: an absent field is not evidence of ownership.
+	return { email: info.email, verified: info.verified_email === true, name: info.name };
 }

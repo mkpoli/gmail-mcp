@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
+import setupGuide from "../docs/index.html";
 import {
 	exchangeGoogleCode,
 	fetchGoogleUserInfo,
@@ -29,6 +30,23 @@ const GOOGLE_SCOPE = [
 ].join(" ");
 
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
+
+// The deployment documents itself: visiting the domain explains what this
+// server is and how to connect a client to it. The Text module rule in
+// wrangler.jsonc inlines the file as a string; bun's own ambient types
+// describe .html imports as bundles, hence the cast.
+const guide = setupGuide as unknown as string;
+
+app.get(
+	"/",
+	() =>
+		new Response(guide, {
+			headers: {
+				"Content-Type": "text/html; charset=utf-8",
+				"Cache-Control": "public, max-age=3600",
+			},
+		}),
+);
 
 app.get("/authorize", async (c) => {
 	// Clients register themselves via /register (dynamic client registration),

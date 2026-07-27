@@ -24,6 +24,9 @@
 			"id": "0d7a73c2d21d40b8beacba9a4b16a7df"
 		}
 	],
+	"rules": [
+		{ "type": "Text", "globs": ["**/*.html"] }
+	],
 	"observability": {
 		"enabled": true
 	},

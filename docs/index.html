@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gmail-mcp — setup</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfaf9;
+    --panel: #ffffff;
+    --ink: #16181d;
+    --muted: #5b6270;
+    --line: #e6e3df;
+    --warm: #e8590c;
+    --cool: #5b4bcf;
+    --ok: #197d4a;
+    --code-bg: #f4f2ef;
+    --shadow: 0 1px 2px rgba(20,20,30,.05), 0 8px 24px rgba(20,20,30,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --panel: #151a22;
+      --ink: #e8eaee;
+      --muted: #9aa3b2;
+      --line: #262d38;
+      --warm: #f6821f;
+      --cool: #9d8cff;
+      --ok: #4ade80;
+      --code-bg: #0b0f15;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 24px 96px; }
+  header { padding: 72px 0 40px; text-align: center; }
+  h1 { font-size: 2.6rem; margin: 0 0 .3em; letter-spacing: -.03em; }
+  h1 .dash { color: var(--warm); }
+  .tagline { color: var(--muted); font-size: 1.08rem; margin: 0 auto; max-width: 34em; }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 24px; }
+  .pill {
+    font-size: .78rem; letter-spacing: .02em; padding: 5px 11px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); background: var(--panel);
+  }
+  h2 {
+    font-size: 1.32rem; margin: 56px 0 6px; letter-spacing: -.01em;
+    display: flex; align-items: baseline; gap: .55em;
+  }
+  h2 .n {
+    flex: none; width: 1.7em; height: 1.7em; border-radius: 50%;
+    display: grid; place-items: center; font-size: .72em;
+    background: linear-gradient(135deg, var(--warm), #c2410c); color: #fff; font-weight: 700;
+  }
+  h2 + p { color: var(--muted); margin-top: 0; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 22px; box-shadow: var(--shadow); margin: 18px 0;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; overflow-x: auto; margin: 14px 0;
+    font: 13.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
+  p code, li code, td code { background: var(--code-bg); padding: .12em .38em; border-radius: 5px; }
+  ol.steps { padding-left: 1.2em; }
+  ol.steps li { margin: .5em 0; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: .95rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  .note {
+    border-left: 3px solid var(--warm); background: color-mix(in oklab, var(--warm) 7%, transparent);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: .95rem;
+  }
+  .note.cool { border-left-color: var(--cool); background: color-mix(in oklab, var(--cool) 8%, transparent); }
+  .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 10px; align-items: center; margin: 22px 0; }
+  .flow .box {
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px 10px; text-align: center;
+    background: var(--panel); font-size: .86rem; line-height: 1.4;
+  }
+  .flow .box b { display: block; font-size: .95rem; margin-bottom: 3px; }
+  .flow .arrow { color: var(--muted); font-size: 1.3rem; }
+  @media (max-width: 640px) {
+    .flow { grid-template-columns: 1fr; }
+    .flow .arrow { transform: rotate(90deg); justify-self: center; }
+    h1 { font-size: 2rem; }
+  }
+  .copy { position: relative; }
+  .copy button {
+    position: absolute; top: 8px; right: 8px; font: inherit; font-size: .74rem;
+    padding: 4px 9px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+  }
+  .copy button:hover { color: var(--ink); border-color: var(--muted); }
+  footer { margin-top: 72px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; text-align: center; }
+  a { color: var(--warm); text-underline-offset: 2px; }
+  footer a { color: var(--muted); }
+  .checkline { display: flex; gap: .6em; align-items: flex-start; margin: .45em 0; }
+  .checkline span:first-child { color: var(--ok); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>gmail<span class="dash">-</span>mcp</h1>
+  <p class="tagline">Your Gmail accounts, served to any MCP client, from your own Cloudflare Worker. Roughly ten minutes to deploy.</p>
+  <div class="pills">
+    <span class="pill">22 tools</span>
+    <span class="pill">OAuth 2.1 + PKCE</span>
+    <span class="pill">multi-account</span>
+    <span class="pill">scope gmail.modify</span>
+    <span class="pill">MIT</span>
+  </div>
+</header>
+
+<div class="flow">
+  <div class="box"><b>MCP client</b>Claude Code · claude.ai · mobile</div>
+  <div class="arrow">→</div>
+  <div class="box"><b>your Worker</b>OAuth server + agent</div>
+  <div class="arrow">→</div>
+  <div class="box"><b>Gmail API</b>one mailbox per grant</div>
+</div>
+
+<p>Every <em>connection</em> performs its own Google sign-in, so two mailboxes can be connected to one deployment at the same time — each permanently bound to the account chosen at its consent screen. Your refresh tokens stay in your own Cloudflare account.</p>
+
+<h2><span class="n">1</span> Google Cloud</h2>
+<p>Create a project and switch the Gmail API on.</p>
+
+<div class="card copy">
+<pre id="c1">PROJECT="gmail-mcp-$(openssl rand -hex 3)"
+gcloud auth login
+gcloud projects create "$PROJECT" --name="gmail-mcp"
+gcloud config set project "$PROJECT"
+gcloud services enable gmail.googleapis.com</pre>
+<button data-copy="c1">copy</button>
+</div>
+
+<p>The consent screen and the OAuth client have no API, so these two are browser steps:</p>
+<ol class="steps">
+  <li><b>OAuth consent screen</b> → <i>External</i> → app name and your email. While the app is unverified, add every mailbox you plan to connect under <b>Test users</b>.</li>
+  <li><b>Credentials → Create credentials → OAuth client ID</b> → <i>Web application</i>, with one authorized redirect URI:
+    <pre>https://&lt;your-domain&gt;/callback</pre>
+    Keep the client ID and secret for the next step.</li>
+</ol>
+
+<div class="note">Adding <code>http://localhost:8788/callback</code> as a second redirect URI now saves a trip back if you ever run <code>bun run dev</code>.</div>
+
+<h2><span class="n">2</span> Cloudflare</h2>
+<p>Clone, point the Worker at your domain, and let the setup script do the rest.</p>
+
+<div class="card copy">
+<pre id="c2">git clone https://github.com/mkpoli/gmail-mcp &amp;&amp; cd gmail-mcp
+bun install
+# edit wrangler.jsonc — set `name` and the routes `pattern` to your domain
+bun run setup</pre>
+<button data-copy="c2">copy</button>
+</div>
+
+<p><code>bun run setup</code> creates the KV namespace, prompts for each secret, generates the cookie key, and deploys. It is safe to re-run — every step can be skipped.</p>
+
+<h2><span class="n">3</span> Decide who may sign in</h2>
+<p><code>ALLOWED_EMAILS</code> is checked against the address Google reports as verified, after consent and before any grant exists.</p>
+
+<table>
+  <tr><th>Value</th><th>Who gets in</th></tr>
+  <tr><td><i>empty</i></td><td>nobody — fail-closed default</td></tr>
+  <tr><td><code>you@gmail.com, work@co.com</code></td><td>exactly those accounts</td></tr>
+  <tr><td><code>*@your-company.com</code></td><td>any account in that domain</td></tr>
+  <tr><td><code>*</code></td><td>any verified Google account</td></tr>
+</table>
+
+<div class="note cool">A grant only ever reaches the mailbox that authenticated it, so widening this list never widens access to accounts already connected. What <code>*</code> hands strangers is the use of your deployment, and your Google client's quota, for their own mail.</div>
+
+<h2><span class="n">4</span> Connect</h2>
+<p>No client ID or secret on the client side — MCP clients register themselves.</p>
+
+<div class="card copy">
+<pre id="c3">claude mcp add --transport http gmail-personal https://&lt;your-domain&gt;/mcp
+claude mcp add --transport http gmail-work     https://&lt;your-domain&gt;/mcp/work</pre>
+<button data-copy="c3">copy</button>
+</div>
+
+<p>Run <code>/mcp</code> in Claude Code to authenticate each one, signing in with the matching Google account. In claude.ai: <b>Settings → Connectors → Add custom connector</b>, paste the URL, leave the credential fields empty.</p>
+
+<div class="note">Any single-segment label works — <code>/mcp/work</code>, <code>/mcp/family</code>. It exists so clients that refuse two servers sharing a URL can still hold several mailboxes.</div>
+
+<h2><span class="n">5</span> What you get</h2>
+<div class="checkline"><span>✓</span><span><b>Read</b> — search with Gmail operators, read messages and threads, download attachments</span></div>
+<div class="checkline"><span>✓</span><span><b>Compose</b> — send, reply to everyone with quoting, full draft lifecycle, attachments and inline images</span></div>
+<div class="checkline"><span>✓</span><span><b>Organize</b> — labels including nested ones, batch changes over many messages, reversible trash</span></div>
+
+<p>Japanese, Chinese, emoji, and right-to-left text survive the round trip: subjects and filenames are RFC 2047 encoded, bodies carry their declared charset.</p>
+
+<footer>
+  <a href="https://github.com/mkpoli/gmail-mcp">github.com/mkpoli/gmail-mcp</a> · MIT
+</footer>
+
+</div>
+<script>
+  for (const b of document.querySelectorAll('.copy button')) {
+    b.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      const was = b.textContent; b.textContent = 'copied'; setTimeout(() => (b.textContent = was), 1200);
+    });
+  }
+</script>
+</body>
+</html>

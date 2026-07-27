@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" width="760" height="300" role="img"
+     aria-label="Request path from MCP client through the Worker to the Gmail API, with KV and Durable Object storage">
+  <defs>
+    <linearGradient id="cf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6821F"/><stop offset="1" stop-color="#E8590C"/>
+    </linearGradient>
+    <linearGradient id="mcp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6E56CF"/><stop offset="1" stop-color="#3E63DD"/>
+    </linearGradient>
+    <linearGradient id="goo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2ea44f"/><stop offset="1" stop-color="#15803d"/>
+    </linearGradient>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="currentColor" opacity="0.45"/>
+    </marker>
+    <style>
+      .lbl { font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; fill: currentColor; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill: currentColor; }
+      .box { fill: currentColor; fill-opacity: 0.04; stroke-width: 2; }
+      .wire { stroke: currentColor; stroke-opacity: 0.45; stroke-width: 2; fill: none; }
+    </style>
+  </defs>
+
+  <!-- client -->
+  <g>
+    <rect class="box" x="16" y="96" width="150" height="108" rx="14" stroke="url(#mcp)"/>
+    <text class="lbl" x="91" y="130" font-size="15" font-weight="600" text-anchor="middle">MCP client</text>
+    <text class="lbl" x="91" y="152" font-size="12" opacity="0.66" text-anchor="middle">Claude Code</text>
+    <text class="lbl" x="91" y="169" font-size="12" opacity="0.66" text-anchor="middle">claude.ai · mobile</text>
+    <text class="mono" x="91" y="190" font-size="11" opacity="0.5" text-anchor="middle">OAuth 2.1 + PKCE</text>
+  </g>
+
+  <!-- worker -->
+  <g>
+    <rect class="box" x="246" y="56" width="268" height="188" rx="16" stroke="url(#cf)"/>
+    <text class="lbl" x="380" y="84" font-size="15" font-weight="600" text-anchor="middle">Cloudflare Worker</text>
+    <text class="mono" x="380" y="102" font-size="11" opacity="0.55" text-anchor="middle">your-domain/mcp{/label}</text>
+
+    <rect class="box" x="266" y="118" width="228" height="40" rx="10" stroke="currentColor" stroke-opacity="0.28"/>
+    <text class="lbl" x="380" y="143" font-size="12.5" text-anchor="middle">OAuthProvider — grants in KV</text>
+
+    <rect class="box" x="266" y="168" width="228" height="40" rx="10" stroke="currentColor" stroke-opacity="0.28"/>
+    <text class="lbl" x="380" y="193" font-size="12.5" text-anchor="middle">McpAgent — Durable Object / session</text>
+
+    <text class="mono" x="380" y="228" font-size="10.5" opacity="0.5" text-anchor="middle">tokens sealed per grant · mail never stored</text>
+  </g>
+
+  <!-- google -->
+  <g>
+    <rect class="box" x="594" y="96" width="150" height="108" rx="14" stroke="url(#goo)"/>
+    <text class="lbl" x="669" y="130" font-size="15" font-weight="600" text-anchor="middle">Google</text>
+    <text class="lbl" x="669" y="152" font-size="12" opacity="0.66" text-anchor="middle">OAuth 2.0</text>
+    <text class="lbl" x="669" y="169" font-size="12" opacity="0.66" text-anchor="middle">Gmail REST API</text>
+    <text class="mono" x="669" y="190" font-size="11" opacity="0.5" text-anchor="middle">scope gmail.modify</text>
+  </g>
+
+  <!-- wires -->
+  <path id="w1" class="wire" d="M166 150 H246" marker-end="url(#tip)"/>
+  <path id="w2" class="wire" d="M514 150 H594" marker-end="url(#tip)"/>
+
+  <!-- travelling packets -->
+  <circle r="5" fill="url(#mcp)">
+    <animateMotion dur="2.6s" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="linear">
+      <mpath href="#w1"/>
+    </animateMotion>
+    <animate attributeName="opacity" values="0;1;1;0" dur="2.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="5" fill="url(#goo)">
+    <animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="linear">
+      <mpath href="#w2"/>
+    </animateMotion>
+    <animate attributeName="opacity" values="0;1;1;0" dur="2.6s" begin="1.3s" repeatCount="indefinite"/>
+  </circle>
+
+  <text class="mono" x="206" y="140" font-size="10" opacity="0.55" text-anchor="middle">tools/call</text>
+  <text class="mono" x="554" y="140" font-size="10" opacity="0.55" text-anchor="middle">REST</text>
+
+  <text class="mono" x="380" y="272" font-size="11" opacity="0.5" text-anchor="middle">one deployment · one Google sign-in per connection · one mailbox per grant</text>
+</svg>

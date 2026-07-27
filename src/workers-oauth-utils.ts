@@ -413,7 +413,10 @@ export async function addApprovedClient(
 	const signature = await signData(payload, cookieSecret);
 	const cookieValue = `${signature}.${btoa(payload)}`;
 
-	return `${approvedClientsCookieName}=${cookieValue}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=${THIRTY_DAYS_IN_SECONDS}`;
+	// Strict, not Lax: this cookie skips the approval dialog for a remembered
+	// client, so under Lax a page controlled by someone else could start the
+	// flow in the victim's browser and have it auto-approved.
+	return `${approvedClientsCookieName}=${cookieValue}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=${THIRTY_DAYS_IN_SECONDS}`;
 }
 
 /**

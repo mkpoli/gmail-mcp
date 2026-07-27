@@ -9,7 +9,8 @@
 		"check": "biome check src test && tsc --noEmit",
 		"fix": "biome check --write src test",
 		"test": "bun test",
-		"types": "wrangler types"
+		"types": "wrangler types",
+		"setup": "bun run scripts/setup.ts"
 	},
 	"dependencies": {
 		"@cloudflare/workers-oauth-provider": "^0.8.1",

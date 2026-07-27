@@ -30,8 +30,10 @@ const THREAD_BODY_LIMIT = 10_000;
 // Whole-thread ceiling: a long notification thread would otherwise return
 // hundreds of kilobytes of quoted machine-generated mail.
 const THREAD_TOTAL_BUDGET = 30_000;
-// Base64 payload budget for attachment downloads (~1.5 MB of file data).
-const ATTACHMENT_B64_LIMIT = 2_000_000;
+// Attachment download ceiling, checked against the part's declared size before
+// any bytes are fetched — base64 of a large file would otherwise be buffered
+// whole in the session's Durable Object before any cap could apply.
+const ATTACHMENT_BYTE_LIMIT = 1_500_000;
 
 const filePartSchema = z.object({
 	filename: z.string(),
@@ -57,6 +59,23 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	private get grantProps(): Props {
 		if (!this.props) throw new Error("missing auth props on MCP session");
 		return this.props;
+	}
+
+	// The MCP transport addresses this Durable Object by the Mcp-Session-Id
+	// header alone, so the session id — not the OAuth grant — would otherwise
+	// decide whose mailbox a request reaches. The first grant to touch a session
+	// claims it; every later request must present the same account, or the
+	// cached Google token of the first account would serve the second.
+	private async assertSessionOwner(): Promise<void> {
+		const caller = this.grantProps.email.toLowerCase();
+		const owner = await this.ctx.storage.get<string>("owner");
+		if (owner === undefined) {
+			await this.ctx.storage.put("owner", caller);
+			return;
+		}
+		if (owner !== caller) {
+			throw new Error("this MCP session belongs to a different Google account");
+		}
 	}
 
 	// Single-flight guard: concurrent tool calls near expiry share one refresh.
@@ -94,6 +113,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	}
 
 	private async api(path: string, init: RequestInit = {}): Promise<any> {
+		await this.assertSessionOwner();
 		try {
 			return await gmailFetch(await this.token(), path, init);
 		} catch (e) {
@@ -102,8 +122,11 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				// that just failed, so refresh unconditionally before retrying.
 				return gmailFetch(await this.token(true), path, init);
 			}
-			// Gmail's per-user rate limit is bursty; one backoff clears most of it.
-			if (e instanceof GmailApiError && (e.status === 429 || e.status === 503)) {
+			// Gmail's per-user rate limit is bursty and one backoff clears most of
+			// it, but a write may have already been applied before the error came
+			// back — retrying a send would deliver the message twice.
+			const idempotent = !init.method || init.method === "GET";
+			if (idempotent && e instanceof GmailApiError && (e.status === 429 || e.status === 503)) {
 				await new Promise((r) => setTimeout(r, 1200));
 				return gmailFetch(await this.token(), path, init);
 			}
@@ -234,12 +257,10 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					});
 				}
 
-				// One budget for the whole thread; each message gets an equal share
-				// so a single long message cannot crowd out the rest.
-				const perMessage = Math.max(
-					1000,
-					Math.floor(THREAD_TOTAL_BUDGET / Math.max(kept.length, 1)),
-				);
+				// One budget for the whole thread, split evenly, so a single long
+				// message cannot crowd out the rest and the total stays bounded
+				// however many messages were requested.
+				const perMessage = Math.floor(THREAD_TOTAL_BUDGET / Math.max(kept.length, 1));
 				const messages = await this.mapLimited(kept, 4, async (m: any) => ({
 					...summarizeMessage(m),
 					body: truncate(await this.messageBody(m), Math.min(perMessage, THREAD_BODY_LIMIT)),
@@ -509,23 +530,42 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					.describe("Return only decoded text for text/* attachments, no base64"),
 			},
 			async ({ messageId, attachmentId, textOnly }) => {
+				// The part's declared type decides whether decoding to text is
+				// meaningful; decoding a PDF as UTF-8 would return pages of noise.
+				const message = await this.api(`/messages/${encodeURIComponent(messageId)}?format=full`);
+				const part = collectAttachments(message.payload).find(
+					(a) => a.attachmentId === attachmentId,
+				);
+				if (!part) {
+					throw new Error("no attachment with that id on this message");
+				}
+				if (part.size > ATTACHMENT_BYTE_LIMIT) {
+					return this.text({
+						filename: part.filename,
+						mimeType: part.mimeType,
+						size: part.size,
+						error: `attachment is larger than the ${ATTACHMENT_BYTE_LIMIT}-byte budget; fetch it with a regular mail client`,
+					});
+				}
+
 				const att = await this.api(
 					`/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
 				);
 				const data: string = att?.data ?? "";
-				if (data.length > ATTACHMENT_B64_LIMIT) {
-					return this.text({
-						size: att.size,
-						error: `attachment exceeds the ${ATTACHMENT_B64_LIMIT} base64-character budget; fetch it with a regular mail client`,
-					});
-				}
+				const meta = { filename: part.filename, mimeType: part.mimeType, size: part.size };
 				if (textOnly) {
+					if (!part.mimeType?.startsWith("text/")) {
+						return this.text({
+							...meta,
+							error: "textOnly applies to text/* attachments; omit it to receive base64",
+						});
+					}
 					return this.text({
-						size: att.size,
-						text: truncate(decodeAttachmentText(data, "text/plain", "utf-8"), BODY_LIMIT),
+						...meta,
+						text: truncate(decodeAttachmentText(data, part.mimeType, "utf-8"), BODY_LIMIT),
 					});
 				}
-				return this.text({ size: att.size, dataBase64Url: data });
+				return this.text({ ...meta, dataBase64Url: data });
 			},
 		);
 
@@ -674,4 +714,7 @@ export default new OAuthProvider({
 	clientRegistrationEndpoint: "/register",
 	defaultHandler: GoogleHandler as any,
 	tokenEndpoint: "/token",
+	// Registration is open to any client, so the code exchange must carry real
+	// cryptographic proof: plain PKCE offers none.
+	allowPlainPKCE: false,
 });
