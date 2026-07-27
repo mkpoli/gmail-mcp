@@ -810,7 +810,16 @@ async function getApprovedClientsFromCookie(
 	if (parts.length !== 2) return null;
 
 	const [signatureHex, base64Payload] = parts;
-	const payload = atob(base64Payload);
+
+	// The payload is decoded before its signature is checked, so it is still
+	// arbitrary input at this point: a value that is not base64 makes atob
+	// throw, and the caller runs before any error boundary.
+	let payload: string;
+	try {
+		payload = atob(base64Payload);
+	} catch {
+		return null;
+	}
 
 	const isValid = await verifySignature(signatureHex, payload, cookieSecret);
 
