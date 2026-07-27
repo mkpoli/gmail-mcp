@@ -91,17 +91,27 @@ function encodeHeader(value: string): string {
 }
 
 // Splits an address list on the commas that separate addresses, ignoring the
-// ones inside a quoted display name or an angle-addr.
+// ones inside a quoted display name, an angle-addr, or a parenthesised
+// comment, and honouring backslash escapes inside quoted strings.
 function splitAddressList(value: string): string[] {
 	const out: string[] = [];
 	let current = "";
 	let quoted = false;
 	let angled = false;
-	for (const ch of value) {
+	let comment = 0;
+	for (let i = 0; i < value.length; i++) {
+		const ch = value[i];
+		if (quoted && ch === "\\") {
+			current += ch + (value[i + 1] ?? "");
+			i++;
+			continue;
+		}
 		if (ch === '"') quoted = !quoted;
+		else if (!quoted && ch === "(") comment++;
+		else if (!quoted && ch === ")" && comment > 0) comment--;
 		else if (ch === "<" && !quoted) angled = true;
 		else if (ch === ">" && !quoted) angled = false;
-		if (ch === "," && !quoted && !angled) {
+		if (ch === "," && !quoted && !angled && comment === 0) {
 			if (current.trim()) out.push(current.trim());
 			current = "";
 			continue;
@@ -177,14 +187,39 @@ function normalizeB64(name: string, content: string): string {
 	return wrap76(cleaned);
 }
 
+// A non-ASCII filename belongs in an RFC 2231 extended parameter. The legacy
+// `name=` parameter keeps an RFC 2047 word beside it, which is what mail
+// clients predating RFC 2231 read.
+function filenameParams(filename: string): { name: string; disposition: string } {
+	const quoted = filename.replace(/["\\]/g, "_");
+	if (/^[\x20-\x7e]*$/.test(filename)) {
+		return { name: `name="${quoted}"`, disposition: `filename="${quoted}"` };
+	}
+	const encoded = [...new TextEncoder().encode(filename)]
+		.map((b) =>
+			// attribute-char per RFC 2231: token characters minus * ' %
+			(b >= 0x30 && b <= 0x39) ||
+			(b >= 0x41 && b <= 0x5a) ||
+			(b >= 0x61 && b <= 0x7a) ||
+			[0x21, 0x23, 0x24, 0x26, 0x2b, 0x2d, 0x2e, 0x5e, 0x5f, 0x60, 0x7c, 0x7e].includes(b)
+				? String.fromCharCode(b)
+				: `%${b.toString(16).toUpperCase().padStart(2, "0")}`,
+		)
+		.join("");
+	return {
+		name: `name="${encodeHeader(filename).replace(/"/g, "'")}"`,
+		disposition: `filename*=UTF-8''${encoded}`,
+	};
+}
+
 function filePart(p: FilePart): string[] {
 	assertHeaderSafe("attachment filename", p.filename);
 	const contentType = assertMediaType(p.contentType);
-	const filename = encodeHeader(p.filename).replace(/"/g, "'");
+	const params = filenameParams(p.filename);
 	return [
-		`Content-Type: ${contentType}; name="${filename}"`,
+		`Content-Type: ${contentType}; ${params.name}`,
 		"Content-Transfer-Encoding: base64",
-		`Content-Disposition: attachment; filename="${filename}"`,
+		`Content-Disposition: attachment; ${params.disposition}`,
 		"",
 		normalizeB64(`attachment ${p.filename}`, p.content),
 	];
@@ -291,15 +326,18 @@ export function buildRfc822({
 export function parseAddresses(header: string | undefined): string[] {
 	if (!header) return [];
 	const out: string[] = [];
-	for (const m of header.matchAll(/<([^<>\s]+@[^<>\s]+)>/g)) {
-		out.push(m[1].toLowerCase());
-	}
-	// Bare addresses without angle brackets (single or comma-separated).
-	if (out.length === 0) {
-		for (const piece of header.split(",")) {
-			const bare = piece.trim().match(/^([^\s@"]+@[^\s@"]+)$/);
-			if (bare) out.push(bare[1].toLowerCase());
+	for (const entry of splitAddressList(header)) {
+		const angled = entry.match(/<([^<>\s]+@[^<>\s]+)>/);
+		if (angled) {
+			out.push(angled[1].toLowerCase());
+			continue;
 		}
+		// No angle-addr: drop comments and quoted text, then take the address token.
+		const bare = entry
+			.replace(/\([^)]*\)/g, " ")
+			.replace(/"(?:[^"\\]|\\.)*"/g, " ")
+			.match(/([^\s<>@",]+@[^\s<>@",]+)/);
+		if (bare) out.push(bare[1].toLowerCase());
 	}
 	return [...new Set(out)];
 }
@@ -307,6 +345,56 @@ export function parseAddresses(header: string | undefined): string[] {
 export function replySubject(original: string | undefined): string {
 	const s = original ?? "";
 	return /^\s*re:/i.test(s) ? s : `Re: ${s}`;
+}
+
+export function forwardSubject(original: string | undefined): string {
+	const s = original ?? "";
+	return /^\s*(fwd?|fw):/i.test(s) ? s : `Fwd: ${s}`;
+}
+
+// The header block Gmail and Thunderbird both put above forwarded content.
+export function forwardHeaderBlock(fields: {
+	from?: string;
+	date?: string;
+	subject?: string;
+	to?: string;
+	cc?: string;
+}): string {
+	return [
+		"---------- Forwarded message ---------",
+		`From: ${fields.from ?? "unknown"}`,
+		`Date: ${fields.date ?? "unknown"}`,
+		`Subject: ${fields.subject ?? ""}`,
+		`To: ${fields.to ?? ""}`,
+		...(fields.cc ? [`Cc: ${fields.cc}`] : []),
+	].join("\n");
+}
+
+export function forwardHtmlBlock(fields: {
+	from?: string;
+	date?: string;
+	subject?: string;
+	to?: string;
+	cc?: string;
+	body: string;
+}): string {
+	const rows = [
+		["From", fields.from],
+		["Date", fields.date],
+		["Subject", fields.subject],
+		["To", fields.to],
+		["Cc", fields.cc],
+	]
+		.filter(([, v]) => v)
+		.map(([k, v]) => `<div><b>${k}:</b> ${escapeHtml(String(v))}</div>`)
+		.join("\n");
+	return [
+		"<div>---------- Forwarded message ---------</div>",
+		rows,
+		'<blockquote style="margin: 0 0 0 0.8ex; border-left: 1px solid #ccc; padding-left: 1ex;">',
+		escapeHtml(fields.body).replace(/\n/g, "<br>\n"),
+		"</blockquote>",
+	].join("\n");
 }
 
 export function quotePlain(from: string, date: string, body: string): string {

@@ -7,6 +7,9 @@ import {
 	buildRfc822,
 	decodeAttachmentText,
 	extractBody,
+	forwardHeaderBlock,
+	forwardHtmlBlock,
+	forwardSubject,
 	GmailApiError,
 	gmailFetch,
 	headerValue,
@@ -515,6 +518,76 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					body: JSON.stringify({ raw, threadId: original.threadId }),
 				});
 				return this.text({ id: m.id, threadId: m.threadId, to, cc: rest });
+			},
+		);
+
+		this.server.tool(
+			"forward_message",
+			`Forward a message from ${account}, quoting the original above its own headers`,
+			{
+				messageId: z.string().describe("The message being forwarded"),
+				to: z.string(),
+				cc: z.string().optional(),
+				body: z.string().default("").describe("Your own note above the forwarded content"),
+				htmlBody: z.string().optional(),
+				includeAttachments: z
+					.boolean()
+					.default(false)
+					.describe("Re-attach the original's files, within the attachment size budget"),
+			},
+			async ({ messageId, to, cc, body, htmlBody, includeAttachments }) => {
+				const original = await this.api(`/messages/${encodeURIComponent(messageId)}?format=full`);
+				const fields = {
+					from: headerValue(original, "From"),
+					date: headerValue(original, "Date"),
+					subject: headerValue(original, "Subject"),
+					to: headerValue(original, "To"),
+					cc: headerValue(original, "Cc"),
+				};
+				const originalBody = truncate(await this.messageBody(original), THREAD_BODY_LIMIT);
+
+				const carried = collectAttachments(original.payload).filter(
+					(a) => a.size <= ATTACHMENT_BYTE_LIMIT,
+				);
+				const skipped = collectAttachments(original.payload)
+					.filter((a) => a.size > ATTACHMENT_BYTE_LIMIT)
+					.map((a) => a.filename);
+				const attachments = includeAttachments
+					? await this.mapLimited(carried, 4, async (a) => {
+							const blob = await this.api(
+								`/messages/${encodeURIComponent(original.id)}/attachments/${encodeURIComponent(a.attachmentId)}`,
+							);
+							return {
+								filename: a.filename,
+								contentType: a.mimeType,
+								// Gmail hands back base64url; the builder wants standard base64.
+								content: (blob?.data ?? "").replace(/-/g, "+").replace(/_/g, "/"),
+							};
+						})
+					: [];
+
+				const raw = b64urlEncode(
+					buildRfc822({
+						to,
+						cc,
+						subject: forwardSubject(fields.subject),
+						body: `${body}\n\n${forwardHeaderBlock(fields)}\n\n${originalBody}`,
+						htmlBody: htmlBody
+							? `${htmlBody}\n<br>\n${forwardHtmlBlock({ ...fields, body: originalBody })}`
+							: undefined,
+						attachments,
+					}),
+				);
+				const m = await this.api("/messages/send", {
+					method: "POST",
+					body: JSON.stringify({ raw }),
+				});
+				return this.text({
+					id: m.id,
+					threadId: m.threadId,
+					attachmentsForwarded: attachments.length,
+					...(includeAttachments && skipped.length > 0 ? { skippedTooLarge: skipped } : {}),
+				});
 			},
 		);
 

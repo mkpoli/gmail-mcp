@@ -6,6 +6,9 @@ import {
 	decodeAttachmentText,
 	escapeHtml,
 	extractBody,
+	forwardHeaderBlock,
+	forwardHtmlBlock,
+	forwardSubject,
 	headerValue,
 	parseAddresses,
 	quoteHtml,
@@ -229,6 +232,29 @@ describe("buildRfc822", () => {
 		expect(decoded).toBe("日本語".repeat(40));
 	});
 
+	test("uses RFC 2231 for a non-ASCII attachment filename", () => {
+		const raw = buildRfc822({
+			to: "a@example.com",
+			subject: "s",
+			body: "b",
+			attachments: [{ filename: "品詞リスト.csv", contentType: "text/csv", content: btoa("a,b") }],
+		});
+		// Percent-encoded UTF-8 in the disposition, RFC 2047 word in the legacy name.
+		expect(raw).toContain("filename*=UTF-8''%E5%93%81%E8%A9%9E");
+		expect(raw).toMatch(/Content-Type: text\/csv; name="=\?UTF-8\?B\?/);
+	});
+
+	test("keeps a plain filename unencoded", () => {
+		const raw = buildRfc822({
+			to: "a@example.com",
+			subject: "s",
+			body: "b",
+			attachments: [{ filename: "report.csv", contentType: "text/csv", content: btoa("a,b") }],
+		});
+		expect(raw).toContain('Content-Disposition: attachment; filename="report.csv"');
+		expect(raw).not.toContain("filename*=");
+	});
+
 	test("rejects a content type carrying extra parameters", () => {
 		expect(() =>
 			buildRfc822({
@@ -388,6 +414,37 @@ describe("reply helpers", () => {
 		]);
 		expect(parseAddresses(undefined)).toEqual([]);
 		expect(parseAddresses("A <x@example.com>, B <x@example.com>")).toEqual(["x@example.com"]);
+	});
+
+	test("parseAddresses survives escaped quotes and comments", () => {
+		expect(parseAddresses('"O\\"Brien, Pat" <p@example.com>, Ann <a@example.org>')).toEqual([
+			"p@example.com",
+			"a@example.org",
+		]);
+		expect(parseAddresses("(a comment, with comma) solo@example.com")).toEqual([
+			"solo@example.com",
+		]);
+	});
+
+	test("forwardSubject prefixes once", () => {
+		expect(forwardSubject("Hello")).toBe("Fwd: Hello");
+		expect(forwardSubject("Fwd: Hello")).toBe("Fwd: Hello");
+		expect(forwardSubject("FW: Hello")).toBe("FW: Hello");
+	});
+
+	test("forward blocks carry the original envelope and escape HTML", () => {
+		const fields = {
+			from: "A <a@example.com>",
+			date: "Fri, 25 Jul 2026",
+			subject: "Original",
+			to: "b@example.org",
+		};
+		const text = forwardHeaderBlock(fields);
+		expect(text).toContain("---------- Forwarded message ---------");
+		expect(text).toContain("From: A <a@example.com>");
+		const html = forwardHtmlBlock({ ...fields, body: "<script>x</script>" });
+		expect(html).not.toContain("<script>");
+		expect(html).toContain("&lt;script&gt;");
 	});
 
 	test("replySubject prefixes once", () => {
