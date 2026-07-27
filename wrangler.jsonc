@@ -27,6 +27,23 @@
 	"rules": [
 		{ "type": "Text", "globs": ["**/*.html"] }
 	],
+	"vars": {
+		// How many distinct Google accounts may ever complete sign-in. Raise it
+		// for a shared deployment; Google caps unverified apps at 100 users.
+		"MAX_ACCOUNTS": "25",
+		// Gmail calls allowed per account per minute, across all its sessions.
+		"CALLS_PER_MINUTE": "120"
+	},
+	"unsafe": {
+		"bindings": [
+			{
+				"name": "RATE_LIMITER",
+				"type": "ratelimit",
+				"namespace_id": "1001",
+				"simple": { "limit": 120, "period": 60 }
+			}
+		]
+	},
 	"observability": {
 		"enabled": true
 	},

@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint, types, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Lint and typecheck
+        run: bun run check
+
+      - name: Unit tests
+        run: bun test
+
+      - name: Diagrams match their sources
+        run: |
+          bun run assets
+          if ! git diff --quiet -- docs; then
+            echo "::error::docs/*-light.svg and docs/*-dark.svg are out of date — run 'bun run assets' and commit the result"
+            git diff --stat -- docs
+            exit 1
+          fi
+
+  build:
+    name: worker builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      # A dry run compiles and bundles exactly as a deploy would, without
+      # needing an API token or touching the live Worker.
+      - name: wrangler deploy --dry-run
+        run: bunx wrangler deploy --dry-run --outdir /tmp/worker-build

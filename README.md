@@ -241,6 +241,22 @@ Each grant reaches only the mailbox that authenticated it, so widening this list
 
 ---
 
+## Limits
+
+Two ceilings keep a shared deployment from being drained, both set in `wrangler.jsonc` under `vars`:
+
+| Setting | Default | What it bounds |
+| :-- | :-- | :-- |
+| `MAX_ACCOUNTS` | `25` | How many distinct Google accounts may ever complete sign-in. Accounts already connected keep working when the cap is reached; new ones are turned away. Google caps unverified apps at 100 users, so keep this below that. |
+| `CALLS_PER_MINUTE` | `120` | Gmail calls one account may make per minute, counted across all of its sessions. |
+
+Raise either and redeploy. The rate limit also needs its `limit` updated in the
+`unsafe.bindings` block, which is where Cloudflare's limiter reads it from. A
+single-user deployment can leave both alone — normal assistant use sits far
+below them.
+
+---
+
 ## Security
 
 Self-hosting moves the trust question rather than removing it, so here is where everything sits.

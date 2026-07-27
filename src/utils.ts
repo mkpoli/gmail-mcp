@@ -31,6 +31,21 @@ export function isEmailAllowed(email: string, allowList: string | undefined): bo
 	);
 }
 
+// A deployment that admits a whole domain, or anyone, should still not admit
+// an unbounded number of accounts: Google caps unverified apps at 100 users,
+// and every grant consumes the deployment's own quota afterwards. Accounts
+// already admitted keep working once the cap is reached; only new ones stop.
+export function isUnderAccountCap(knownAccounts: number, isNewAccount: boolean, cap: number) {
+	if (!isNewAccount) return true;
+	if (!Number.isFinite(cap) || cap <= 0) return false;
+	return knownAccounts < cap;
+}
+
+export function parseLimit(raw: string | undefined, fallback: number): number {
+	const n = Number.parseInt(raw ?? "", 10);
+	return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 export function getGoogleAuthorizeUrl({
 	client_id,
 	redirect_uri,

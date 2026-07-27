@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isEmailAllowed } from "../src/utils";
+import { isEmailAllowed, isUnderAccountCap, parseLimit } from "../src/utils";
 
 describe("isEmailAllowed", () => {
 	test("admits no one when unset or empty", () => {
@@ -29,5 +29,38 @@ describe("isEmailAllowed", () => {
 
 	test("a bare domain without the star does not match its addresses", () => {
 		expect(isEmailAllowed("a@example.com", "example.com")).toBe(false);
+	});
+});
+
+describe("isUnderAccountCap", () => {
+	test("lets a known account through whatever the count", () => {
+		expect(isUnderAccountCap(999, false, 25)).toBe(true);
+		expect(isUnderAccountCap(999, false, 0)).toBe(true);
+	});
+
+	test("admits a new account below the cap and refuses it at the cap", () => {
+		expect(isUnderAccountCap(24, true, 25)).toBe(true);
+		expect(isUnderAccountCap(25, true, 25)).toBe(false);
+		expect(isUnderAccountCap(26, true, 25)).toBe(false);
+	});
+
+	test("a cap of zero or less admits nobody new", () => {
+		expect(isUnderAccountCap(0, true, 0)).toBe(false);
+		expect(isUnderAccountCap(0, true, -1)).toBe(false);
+		expect(isUnderAccountCap(0, true, Number.NaN)).toBe(false);
+	});
+});
+
+describe("parseLimit", () => {
+	test("reads a positive integer", () => {
+		expect(parseLimit("50", 25)).toBe(50);
+	});
+
+	test("falls back on anything unusable", () => {
+		expect(parseLimit(undefined, 25)).toBe(25);
+		expect(parseLimit("", 25)).toBe(25);
+		expect(parseLimit("nope", 25)).toBe(25);
+		expect(parseLimit("0", 25)).toBe(25);
+		expect(parseLimit("-5", 25)).toBe(25);
 	});
 });

@@ -7,7 +7,9 @@ import {
 	fetchGoogleUserInfo,
 	getGoogleAuthorizeUrl,
 	isEmailAllowed,
+	isUnderAccountCap,
 	type Props,
+	parseLimit,
 } from "./utils";
 import {
 	addApprovedClient,
@@ -199,6 +201,22 @@ app.get("/callback", async (c) => {
 		if (!user.verified || !isEmailAllowed(user.email, c.env.ALLOWED_EMAILS)) {
 			return c.text("This Google account is not allowed on this server", 403);
 		}
+
+		// Count the accounts this deployment has ever admitted, and stop new ones
+		// past the cap. The marker doubles as the "is this account new" answer.
+		const marker = `account:${user.email.toLowerCase()}`;
+		const seen = await c.env.OAUTH_KV.get(marker);
+		if (!seen) {
+			const known = await c.env.OAUTH_KV.list({ prefix: "account:", limit: 1000 });
+			if (!isUnderAccountCap(known.keys.length, true, parseLimit(c.env.MAX_ACCOUNTS, 25))) {
+				console.warn("account cap reached; refused a new sign-in");
+				return c.text(
+					"This server has reached its limit of connected accounts. Ask its operator to raise MAX_ACCOUNTS.",
+					429,
+				);
+			}
+		}
+		await c.env.OAUTH_KV.put(marker, new Date().toISOString());
 
 		const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
 			metadata: {

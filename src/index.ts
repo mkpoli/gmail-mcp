@@ -22,7 +22,7 @@ import {
 	truncate,
 } from "./gmail";
 import { GoogleHandler } from "./google-handler";
-import { type Props, refreshGoogleToken } from "./utils";
+import { type Props, parseLimit, refreshGoogleToken } from "./utils";
 
 type TokenCache = { accessToken: string; expiresAt: number };
 
@@ -115,8 +115,24 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		return this.refreshing;
 	}
 
+	// One account can open many sessions, so the ceiling has to be counted per
+	// account rather than per Durable Object. The platform limiter keeps that
+	// count outside any one session.
+	private async assertWithinRate(): Promise<void> {
+		const limiter = this.env.RATE_LIMITER;
+		if (!limiter) return;
+		const { success } = await limiter.limit({ key: this.grantProps.email.toLowerCase() });
+		if (!success) {
+			const perMinute = parseLimit(this.env.CALLS_PER_MINUTE, 120);
+			throw new Error(
+				`rate limit reached for this account (about ${perMinute} Gmail calls a minute); retry shortly`,
+			);
+		}
+	}
+
 	private async api(path: string, init: RequestInit = {}): Promise<any> {
 		await this.assertSessionOwner();
+		await this.assertWithinRate();
 		try {
 			return await gmailFetch(await this.token(), path, init);
 		} catch (e) {
