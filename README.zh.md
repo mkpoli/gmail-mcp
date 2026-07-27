@@ -51,7 +51,7 @@
 
 [`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp)是这里面最完整的项目。它覆盖整个Workspace，Gmail只是其中一部分，还做了两件gmail-mcp没有的事：追加Gmail签名、直接从URL拉附件。[`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp)的64个工具能碰到休假回复、委托访问和S/MIME，它们都在`gmail.settings.*`底下，而gmail-mcp从不申请这个scope，所以授权再怎么泄露都够不到那些功能。
 
-其余差别大多来自两处设计。用调用参数路由账号，一份授权就能碰到所有已连接的邮箱；把邮箱绑在连接上，参数写错就什么都碰不到。读取这边，那几个本地服务器把所有part都按UTF-8解码：ISO-2022-JP和Shift_JIS的邮件取回来全是乱码，Gmail以附件形式存放的长邮件返回时正文为空。
+其余差别大多来自两种设计。用调用参数路由账号，一份授权就能碰到所有已连接的邮箱；把邮箱绑在连接上，参数写错就什么都碰不到。读取这边，那几个本地服务器把所有part都按UTF-8解码：ISO-2022-JP和Shift_JIS的邮件取回来全是乱码，Gmail以附件形式存放的长邮件返回时正文为空。
 
 </details>
 
@@ -208,7 +208,7 @@ Gmail本身用原生`fetch`直接调[REST API](https://developers.google.com/wor
 | 路径 | 用途 |
 | :-- | :-- |
 | `/mcp` | MCP端点 |
-| `/mcp/<label>` | 同一个服务器挂在任意单段标签下，供那些不接受两个服务器共用URL的客户端使用 |
+| `/mcp/<label>` | 同一个服务器挂在任意单段标签下，给不接受两个服务器共用URL的客户端用 |
 | `/` | 这份设置指南 |
 | `/authorize` · `/token` · `/register` · `/callback` | OAuth机制 |
 
@@ -216,7 +216,7 @@ Gmail本身用原生`fetch`直接调[REST API](https://developers.google.com/wor
 
 ## 谁可以登录
 
-由`ALLOWED_EMAILS`决定，比对的是Google报告为已验证的地址，检查发生在用户同意之后、授权记录生成之前。
+由`ALLOWED_EMAILS`决定，比对的是Google报告为已验证的地址，检查在用户同意之后、授权记录生成之前进行。
 
 | 值 | 谁能进来 |
 | :-- | :-- |
@@ -236,7 +236,7 @@ Gmail本身用原生`fetch`直接调[REST API](https://developers.google.com/wor
 | 设置 | 默认值 | 限制的对象 |
 | :-- | :-- | :-- |
 | `MAX_ACCOUNTS` | `25` | 允许完成登录的Google账号总数。到上限后已连接的账号照常工作，新账号被拒。Google对未验证应用的上限是100个用户，这个数字要压在它下面。 |
-| `CALLS_PER_MINUTE` | `120` | 单个账号每分钟可以发起的Gmail调用次数，跨它的所有会话合计。 |
+| `CALLS_PER_MINUTE` | `120` | 单个账号每分钟可以发起的Gmail调用次数，按该账号的全部会话合计。 |
 
 调高任意一个之后重新部署。限流那条还要同步更新`unsafe.bindings`块里的`limit`，Cloudflare的限流器从那里读数。单人使用的部署保持默认即可，正常助手用量离这两个上限还远。
 
@@ -246,9 +246,9 @@ Gmail本身用原生`fetch`直接调[REST API](https://developers.google.com/wor
 
 自托管是把信任问题挪个地方，问题本身没有消失，所以这里交代清楚每样东西放在哪。
 
-- **令牌始终是你的。**refresh token加密后放在各自的OAuth授权记录里，存于你自己的KV命名空间；有效期一小时的access token放在会话的Durable Object里。邮件从不存储，只是经过。
+- **令牌始终是你的。**refresh token加密后放在各自的OAuth授权记录里，存在你自己的KV命名空间；有效期一小时的access token放在会话的Durable Object里。邮件从不存储，只是经过。
 - **一个会话，一个邮箱。**MCP会话绑定在开启它的账号上，一个邮箱的授权没法借着别处拿来的会话ID去操作另一个邮箱。
-- **scope从简。** `gmail.modify`涵盖读取、发送、标签和回收站，不含永久删除，也不含`gmail.settings.*`。自动转发规则和过滤器外泄这两条经典的邮箱后门，都在任何被盗授权的能力之外。
+- **scope从简。** `gmail.modify`涵盖读取、发送、标签和回收站，不含永久删除，也不含`gmail.settings.*`。自动转发规则、暗中转投邮件的过滤器，这两条经典邮箱后门，被盗的授权两样都够不到。
 - **信头夹带不进去。**所有出站信头的值只要含CR、LF或NUL就会被拒绝，参数没法越出自己的字段去追加一个信头，比如在主题里塞一个`Bcc`。媒体类型会校验，引用的原文会做HTML转义。但这不管参数本身：`bcc`是正经参数，模型如果听了正文里藏的指令，还是可能填进去，这一层由客户端的确认弹窗来把关。
 - **撤销有效。**收紧`ALLOWED_EMAILS`可以挡住新登录，在[myaccount.google.com/connections](https://myaccount.google.com/connections)撤销应用授权，或者轮换Google客户端密钥让所有授权一次失效。
 
@@ -258,15 +258,15 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 
 ## 测试
 
-66个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google令牌流程、登录允许名单。
+66个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单。
 
-除此之外，所有工具都在真实Gmail账号上跑过，再用另一个账号检查收到的东西：
+另外，所有工具都在真实Gmail账号上跑过，再用另一个账号检查收到的东西：
 
 | 项目 | 结果 |
 | :-- | :-- |
 | 编码 | 日文主题跨encoded word折行后正常还原；emoji、ZWJ序列、RTL阿拉伯文、组合符号、生僻CJK字符原样往返 |
 | 附件 | 名为`請求書.csv`的文件发出、送达、再下载回来，逐字节一致；`cid:`内嵌图片在收件方正常渲染 |
-| 会话归组 | `reply_all`寻址到原发件人，保留第三方的`Cc`，去掉自己的地址，在同一会话里引用了原文 |
+| 会话归组 | `reply_all`把收件人填成原发件人，保留第三方的`Cc`，去掉自己的地址，在同一会话里引用了原文 |
 | 双账号 | 两个账号同时连到一份部署；一个账号的邮件ID在另一个账号上返回`404` |
 | 整理 | 建了一个嵌套的CJK标签，改名、批量套用、删除；会话和单封邮件移入回收站后都成功恢复 |
 | 规模 | 在15000封邮件的邮箱上用Gmail搜索语法加分页查询，没有触发限流 |
@@ -282,6 +282,8 @@ bun test        # 66个单元测试
 bun run assets  # 重新生成明暗两套图示
 bun run deploy
 ```
+
+---
 
 ## 许可
 
