@@ -12,9 +12,9 @@ Gmail を Claude などの AI アシスタントにつなぐ。複数アカウ�
 
 <p align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/demo-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="./docs/demo-light.svg">
-  <img src="./docs/demo-light.svg" alt="アシスタントが仕事用と個人用の受信箱を検索し、添付付きでスレッドに返信する様子" width="760">
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/demo.ja-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./docs/demo.ja-light.svg">
+  <img src="./docs/demo.ja-light.svg" alt="アシスタントが仕事用と個人用の受信箱を検索し、添付付きでスレッドに返信する様子" width="760">
 </picture>
 </p>
 
