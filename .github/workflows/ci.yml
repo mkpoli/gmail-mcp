@@ -31,6 +31,11 @@ jobs:
       - name: Unit tests
         run: bun test
 
+      - name: READMEs render without leaking markup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/check-render.py
+
       - name: Diagrams match their sources
         run: |
           bun run assets
