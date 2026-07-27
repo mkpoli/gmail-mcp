@@ -660,24 +660,15 @@ function collectAttachments(payload: any) {
 	return out;
 }
 
-const mcpHandler = GmailMCP.serve("/mcp");
-
-// Any /mcp/<label> URL serves the same MCP: clients that dedupe servers by
-// URL can hold one connection per Google account under freely chosen labels
-// (each URL signs in independently; sessions ride the Mcp-Session-Id header,
-// so the path rewrite does not mix connections).
-const aliasHandler = {
-	fetch: (request: Request, env: unknown, ctx: unknown) => {
-		const url = new URL(request.url);
-		url.pathname = "/mcp";
-		return (mcpHandler as any).fetch(new Request(url, request), env, ctx);
-	},
-};
-
+// One handler serves /mcp and every /mcp/<label> alias, so clients that dedupe
+// servers by URL can hold one connection per Google account under freely chosen
+// labels. The pattern must cover the aliases itself: the OAuth provider matches
+// api routes by string prefix and dispatches to the first match, so a separate
+// alias entry after "/mcp" would never be reached. Sessions are keyed by the
+// Mcp-Session-Id header rather than the path, so aliases never share state.
 export default new OAuthProvider({
 	apiHandlers: {
-		"/mcp": mcpHandler as any,
-		"/mcp/": aliasHandler as any,
+		"/mcp": GmailMCP.serve("/mcp{/:label}?") as any,
 	},
 	authorizeEndpoint: "/authorize",
 	clientRegistrationEndpoint: "/register",
