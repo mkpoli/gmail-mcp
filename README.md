@@ -204,6 +204,17 @@ sequenceDiagram
 | 🤖 Agent | `src/index.ts` | One Durable Object per MCP session, bound to the account that opened it; single-flight token refresh, throttled fan-out |
 | ✉️ Mail | `src/gmail.ts` | RFC 822 construction, MIME tree walking, charset decoding, reply and forward composition |
 
+### Built with
+
+- **[TypeScript](https://www.typescriptlang.org/) on [Cloudflare Workers](https://developers.cloudflare.com/workers/)** — Durable Objects hold one MCP session each, KV holds the OAuth grants
+- **[Hono](https://hono.dev/)** — routing for the OAuth endpoints, the Google callback, and the setup page at `/`
+- **[`@cloudflare/workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider)** — the OAuth 2.1 server that MCP clients register against
+- **[`agents`](https://github.com/cloudflare/agents)** — `McpAgent`, the MCP transport over Durable Objects
+- **[`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)** with **[Zod](https://zod.dev/)** — tool definitions and argument validation
+- **[Bun](https://bun.sh/)**, **[Biome](https://biomejs.dev/)**, **[Wrangler](https://developers.cloudflare.com/workers/wrangler/)** — install, test, lint, deploy
+
+Gmail itself is called over plain `fetch` against the [REST API](https://developers.google.com/workspace/gmail/api/reference/rest). The official `googleapis` SDK assumes Node and carries far more than a Worker should ship, so message building, MIME parsing, and token refresh live in `src/gmail.ts` and `src/utils.ts` instead.
+
 ### Endpoints
 
 | Path | Purpose |

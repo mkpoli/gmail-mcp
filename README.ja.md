@@ -95,6 +95,19 @@ Claude Code なら `/mcp` を実行して、それぞれを対応する Google �
 
 ---
 
+## 使っている技術
+
+- **[TypeScript](https://www.typescriptlang.org/) / [Cloudflare Workers](https://developers.cloudflare.com/workers/)** — MCP セッションごとに Durable Object、OAuth の権限情報は KV
+- **[Hono](https://hono.dev/)** — OAuth の各エンドポイント、Google からのコールバック、`/` の導入ページのルーティング
+- **[`@cloudflare/workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider)** — MCP クライアントが登録しに来る OAuth 2.1 サーバー
+- **[`agents`](https://github.com/cloudflare/agents)** — `McpAgent`、Durable Object 上の MCP トランスポート
+- **[`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)** と **[Zod](https://zod.dev/)** — ツール定義と引数の検証
+- **[Bun](https://bun.sh/)**・**[Biome](https://biomejs.dev/)**・**[Wrangler](https://developers.cloudflare.com/workers/wrangler/)** — 導入、テスト、静的解析、デプロイ
+
+Gmail 自体は [REST API](https://developers.google.com/workspace/gmail/api/reference/rest) を素の `fetch` で呼ぶ。公式の `googleapis` SDK は Node を前提とし、Worker に載せるには重すぎる。メールの組み立て、MIME の解析、トークンの更新は `src/gmail.ts` と `src/utils.ts` に置いてある。
+
+---
+
 ## サインインできる人
 
 決めるのは `ALLOWED_EMAILS` の値だ。Google が「確認済み」として返すアドレスと照合され、同意画面の後、権限が発行される前に判定される。
