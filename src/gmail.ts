@@ -67,10 +67,78 @@ function assertHeaderSafe(name: string, value: string): string {
 	return value;
 }
 
-// RFC 2047 encoding for non-ASCII header values (Subject, names).
+// RFC 2047 encoding for non-ASCII header values. An encoded-word may not
+// exceed 75 octets, so longer values become several words joined by folding
+// whitespace, split only on UTF-8 character boundaries.
 function encodeHeader(value: string): string {
 	if (/^[\x20-\x7e]*$/.test(value)) return value;
-	return `=?UTF-8?B?${bytesToB64(new TextEncoder().encode(value))}?=`;
+	const bytes = new TextEncoder().encode(value);
+	// "=?UTF-8?B?" + base64 + "?=" stays within 75 octets when the raw chunk is
+	// at most 45 bytes, and a multiple of 3 keeps each word padding-free.
+	const MAX_CHUNK = 45;
+	const words: string[] = [];
+	let i = 0;
+	while (i < bytes.length) {
+		let take = Math.min(MAX_CHUNK, bytes.length - i);
+		// Never cut a multi-byte character: continuation bytes start with 10xxxxxx.
+		while (take > 1 && i + take < bytes.length && (bytes[i + take] & 0xc0) === 0x80) {
+			take--;
+		}
+		words.push(`=?UTF-8?B?${bytesToB64(bytes.subarray(i, i + take))}?=`);
+		i += take;
+	}
+	return words.join("\r\n ");
+}
+
+// Splits an address list on the commas that separate addresses, ignoring the
+// ones inside a quoted display name or an angle-addr.
+function splitAddressList(value: string): string[] {
+	const out: string[] = [];
+	let current = "";
+	let quoted = false;
+	let angled = false;
+	for (const ch of value) {
+		if (ch === '"') quoted = !quoted;
+		else if (ch === "<" && !quoted) angled = true;
+		else if (ch === ">" && !quoted) angled = false;
+		if (ch === "," && !quoted && !angled) {
+			if (current.trim()) out.push(current.trim());
+			current = "";
+			continue;
+		}
+		current += ch;
+	}
+	if (current.trim()) out.push(current.trim());
+	return out;
+}
+
+// Display names carry arbitrary text, so a non-ASCII one needs RFC 2047 just
+// as a subject does; the address itself must stay untouched.
+export function encodeAddressList(value: string): string {
+	return splitAddressList(value)
+		.map((address) => {
+			const match = address.match(/^(.*?)\s*<([^>]*)>$/);
+			if (!match) return address;
+			const [, rawName, addr] = match;
+			const name = rawName.trim().replace(/^"(.*)"$/, "$1");
+			if (!name) return `<${addr}>`;
+			if (!/^[\x20-\x7e]*$/.test(name)) return `${encodeHeader(name)} <${addr}>`;
+			// RFC 5322 specials force a quoted-string display name.
+			return /[",;:<>@[\]\\]/.test(name)
+				? `"${name.replace(/(["\\])/g, "\\$1")}" <${addr}>`
+				: `${name} <${addr}>`;
+		})
+		.join(", ");
+}
+
+// A media type reaches the header as a bare `type/subtype`; anything past a
+// semicolon would add parameters of the caller's choosing, such as a second
+// name= that parsers resolve differently from the real filename.
+function assertMediaType(value: string): string {
+	if (!/^[\w.+-]+\/[\w.+-]+$/.test(value)) {
+		throw new Error(`invalid content type: ${value}`);
+	}
+	return value;
 }
 
 // RFC 2045 requires encoded body lines within 76 characters.
@@ -110,11 +178,11 @@ function normalizeB64(name: string, content: string): string {
 }
 
 function filePart(p: FilePart): string[] {
-	assertHeaderSafe("attachment contentType", p.contentType);
 	assertHeaderSafe("attachment filename", p.filename);
+	const contentType = assertMediaType(p.contentType);
 	const filename = encodeHeader(p.filename).replace(/"/g, "'");
 	return [
-		`Content-Type: ${p.contentType}; name="${filename}"`,
+		`Content-Type: ${contentType}; name="${filename}"`,
 		"Content-Transfer-Encoding: base64",
 		`Content-Disposition: attachment; filename="${filename}"`,
 		"",
@@ -123,13 +191,13 @@ function filePart(p: FilePart): string[] {
 }
 
 function inlinePart(img: InlineImage): string[] {
-	assertHeaderSafe("inline image contentType", img.contentType);
 	assertHeaderSafe("inline image cid", img.cid);
+	const contentType = assertMediaType(img.contentType);
 	if (!/^[\w.@-]+$/.test(img.cid)) {
 		throw new Error(`invalid inline image cid: ${img.cid}`);
 	}
 	return [
-		`Content-Type: ${img.contentType}`,
+		`Content-Type: ${contentType}`,
 		"Content-Transfer-Encoding: base64",
 		`Content-ID: <${img.cid}>`,
 		"Content-Disposition: inline",
@@ -188,10 +256,10 @@ export function buildRfc822({
 	}
 
 	const headers = [
-		`To: ${to}`,
-		...(cc ? [`Cc: ${cc}`] : []),
-		...(bcc ? [`Bcc: ${bcc}`] : []),
-		...(from ? [`From: ${from}`] : []),
+		`To: ${encodeAddressList(to)}`,
+		...(cc ? [`Cc: ${encodeAddressList(cc)}`] : []),
+		...(bcc ? [`Bcc: ${encodeAddressList(bcc)}`] : []),
+		...(from ? [`From: ${encodeAddressList(from)}`] : []),
 		`Subject: ${encodeHeader(subject)}`,
 		...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
 		...(references ? [`References: ${references}`] : []),

@@ -185,6 +185,67 @@ describe("buildRfc822", () => {
 		).toThrow(/htmlBody/);
 	});
 
+	test("RFC 2047-encodes non-ASCII display names in address headers", () => {
+		const raw = buildRfc822({
+			to: '"田中太郎" <t@example.com>, Plain Name <p@example.org>',
+			subject: "s",
+			body: "b",
+		});
+		const header = raw.split("\r\n").find((l) => l.startsWith("To:")) ?? "";
+		expect(header).toContain("=?UTF-8?B?");
+		expect(header).toContain("<t@example.com>");
+		// An ASCII display name stays readable.
+		expect(header).toContain("Plain Name <p@example.org>");
+		// The address list survives a comma inside the quoted name.
+		expect(header.split("<").length - 1).toBe(2);
+	});
+
+	test("keeps bare addresses untouched", () => {
+		const raw = buildRfc822({ to: "a@example.com, b@example.org", subject: "s", body: "b" });
+		expect(raw).toContain("To: a@example.com, b@example.org");
+	});
+
+	test("folds long encoded subjects into 75-octet words", () => {
+		const raw = buildRfc822({ to: "a@example.com", subject: "日本語".repeat(40), body: "b" });
+		const lines = raw.split("\r\n");
+		const start = lines.findIndex((l) => l.startsWith("Subject:"));
+		const words = [lines[start], ...lines.slice(start + 1).filter((l) => l.startsWith(" "))]
+			.map((w) => w.trimStart().replace(/^Subject:\s*/, ""))
+			.filter(Boolean);
+		expect(words.length).toBeGreaterThan(1);
+		// The 75-octet ceiling applies to the encoded-word itself.
+		for (const word of words) {
+			expect(word.length).toBeLessThanOrEqual(75);
+		}
+		// Every word decodes, so no multi-byte character was cut in half.
+		const decoded = words
+			.map((w) => w.match(/=\?UTF-8\?B\?(.+)\?=/)?.[1] ?? "")
+			.map((b64) =>
+				new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(
+					Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0)),
+				),
+			)
+			.join("");
+		expect(decoded).toBe("日本語".repeat(40));
+	});
+
+	test("rejects a content type carrying extra parameters", () => {
+		expect(() =>
+			buildRfc822({
+				to: "a@example.com",
+				subject: "s",
+				body: "b",
+				attachments: [
+					{
+						filename: "safe.txt",
+						contentType: 'text/plain; name="spoofed.exe"',
+						content: btoa("x"),
+					},
+				],
+			}),
+		).toThrow(/invalid content type/);
+	});
+
 	test("includes a From header for send-as aliases", () => {
 		const raw = buildRfc822({
 			to: "a@example.com",
