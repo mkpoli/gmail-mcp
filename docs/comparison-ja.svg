@@ -61,7 +61,7 @@
   <!-- 1 · where it runs -->
   <line class="grid" x1="52" y1="238" x2="1148" y2="238"/>
   <text class="ja row" x="52" y="196">動作環境</text>
-  <text class="en rowsub" x="52" y="216">where it runs</text>
+  <text class="en rowsub" x="52" y="216">実行場所</text>
   <text class="ja word yes" x="454" y="200" text-anchor="middle">Workers</text>
   <text class="ja note" x="454" y="220" text-anchor="middle">サーバー不要</text>
   <text class="ja word" x="640" y="200" text-anchor="middle">事業者ホスト</text>
@@ -74,7 +74,7 @@
   <!-- 2 · multi account -->
   <line class="grid" x1="52" y1="312" x2="1148" y2="312"/>
   <text class="ja row" x="52" y="270">複数アカウント</text>
-  <text class="en rowsub" x="52" y="290">several mailboxes at once</text>
+  <text class="en rowsub" x="52" y="290">同時接続</text>
   <text class="en mark yes" x="454" y="278" text-anchor="middle">✓</text>
   <text class="ja note" x="454" y="298" text-anchor="middle">接続ごとに固定</text>
   <text class="en mark no" x="640" y="284" text-anchor="middle">✕</text>
@@ -86,7 +86,7 @@
   <!-- 3 · send -->
   <line class="grid" x1="52" y1="386" x2="1148" y2="386"/>
   <text class="ja row" x="52" y="344">メール送信</text>
-  <text class="en rowsub" x="52" y="364">send</text>
+  <text class="en rowsub" x="52" y="364">送信</text>
   <text class="en mark yes" x="454" y="358" text-anchor="middle">✓</text>
   <text class="en mark no" x="640" y="352" text-anchor="middle">✕</text>
   <text class="ja note" x="640" y="372" text-anchor="middle">下書きまで</text>
@@ -96,7 +96,7 @@
   <!-- 4 · attachments -->
   <line class="grid" x1="52" y1="460" x2="1148" y2="460"/>
   <text class="ja row" x="52" y="418">添付・インライン画像</text>
-  <text class="en rowsub" x="52" y="438">attachments · cid: images</text>
+  <text class="en rowsub" x="52" y="438">添付とcid:画像</text>
   <text class="en mark yes" x="454" y="432" text-anchor="middle">✓</text>
   <text class="ja word" x="640" y="430" text-anchor="middle">非公開</text>
   <text class="ja note" x="640" y="448" text-anchor="middle">仕様未記載</text>
@@ -106,7 +106,7 @@
   <!-- 5 · reply all -->
   <line class="grid" x1="52" y1="534" x2="1148" y2="534"/>
   <text class="ja row" x="52" y="492">全員に返信＋引用</text>
-  <text class="en rowsub" x="52" y="512">reply_all with quoted history</text>
+  <text class="en rowsub" x="52" y="512">宛先を自動で決定</text>
   <text class="en mark yes" x="454" y="506" text-anchor="middle">✓</text>
   <text class="en mark no" x="640" y="506" text-anchor="middle">✕</text>
   <text class="en mark part" x="828" y="500" text-anchor="middle">△</text>
@@ -117,15 +117,15 @@
   <!-- 6 · token custody -->
   <line class="grid" x1="52" y1="608" x2="1148" y2="608"/>
   <text class="ja row" x="52" y="566">トークンの保持者</text>
-  <text class="en rowsub" x="52" y="586">who holds your refresh token</text>
+  <text class="en rowsub" x="52" y="586">リフレッシュトークン</text>
   <text class="ja word yes" x="454" y="574" text-anchor="middle">自分</text>
-  <text class="en note" x="454" y="592" text-anchor="middle">own Worker</text>
+  <text class="en note" x="454" y="592" text-anchor="middle">自分のWorker</text>
   <text class="ja word" x="640" y="574" text-anchor="middle">事業者</text>
   <text class="en note" x="640" y="592" text-anchor="middle">Google · Anthropic</text>
   <text class="ja word yes" x="828" y="574" text-anchor="middle">自分</text>
-  <text class="en note" x="828" y="592" text-anchor="middle">own server</text>
+  <text class="en note" x="828" y="592" text-anchor="middle">自分のサーバー</text>
   <text class="ja word yes" x="1016" y="574" text-anchor="middle">自分</text>
-  <text class="en note" x="1016" y="592" text-anchor="middle">own PC</text>
+  <text class="en note" x="1016" y="592" text-anchor="middle">自分のPC</text>
 
   <text class="en foot" x="52" y="646">github.com/mkpoli/gmail-mcp · MIT · 2026-07時点の各リポジトリ・公式ドキュメントに基づく</text>
 </svg>

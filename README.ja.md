@@ -23,23 +23,43 @@
 
 ---
 
-## 🔮 できること
+## ⚖️ 他のサーバーとの比較
 
-**読む** — `whoami` · `search_messages` · `get_message` · `get_thread` · `get_attachment`
 
-**書く** — `send_message` · `reply_all` · `forward_message` · `create_draft` · `update_draft` · `send_draft` · `delete_draft` · `list_drafts`
+<p align="center">
+<img src="./docs/comparison-ja.svg" alt="gmail-mcpと公式コネクタ、google_workspace_mcp、Gmail-MCP-Serverの比較" width="880">
+</p>
 
-**整理する** — `list_labels` · `create_label` · `update_label` · `delete_label` · `modify_labels` · `modify_thread_labels` · `batch_modify_messages` · `trash_message` · `untrash_message` · `trash_thread` · `untrash_thread`
+<details>
+<summary><b>より詳しい比較</b> — 6つのプロジェクト、12項目</summary>
 
-送信するメールの構造は、通常のメールクライアントが組み立てるものと同じです。プレーンテキストにHTML版を添え、ファイルを添付し、`cid:`で参照するインライン画像を埋め込みます。入れ子は`multipart/mixed › multipart/related › multipart/alternative`になります。件名と表示名はRFC 2047、ファイル名はRFC 2231で符号化するので、日本語、中国語、絵文字も文字化けせずに送受信できます。
+<br>
 
-`reply_all`は元メールの`Reply-To`・`From`・`To`・`Cc`を読み、自分のアドレスを除いて宛先を組み立て、`References`の連鎖を引き継ぎ、送信する形式に合わせて原文を引用します。`forward_message`では元メールのヘッダを再現し、添付ファイルを引き継いで転送できます。
+| | **gmail-mcp** | [Claude](https://claude.com/connectors/gmail) · [Google](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server) 公式 | [taylorwilsdon/<br>google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp) | [ArtyMcLabin/<br>Gmail-MCP-Server](https://github.com/ArtyMcLabin/Gmail-MCP-Server) | [shinzo-labs/<br>gmail-mcp](https://github.com/shinzo-labs/gmail-mcp) | [aaronsb/<br>google-workspace-mcp](https://github.com/aaronsb/google-workspace-mcp) |
+| :-- | :-: | :-: | :-: | :-: | :-: | :-: |
+| 動作環境 | Cloudflare Workers | 事業者ホスト | 自前サーバーまたはローカル | ローカル | ローカル | ローカル |
+| スマートフォンから利用 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 複数アカウントの同時接続 | ✅ 接続ごとに固定 | ❌ | ✅ 呼び出し時に指定 | ❌ 別名のみ | ❌ | ✅ 呼び出し時に指定 |
+| メール送信 | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| 添付・`cid:`インライン画像 | ✅ | 記載なし | ✅ | ✅ | ❌ | ✅ |
+| 全員返信と原文の引用 | ✅ | ❌ | 下書きのみ | 引用なし | ❌ | ✅ |
+| 転送 | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ |
+| パートごとの文字コード判定 | ✅ | — | ❌ UTF-8固定 | ❌ UTF-8固定 | ❌ | ❌ |
+| CRLFヘッダインジェクションの拒否 | ✅ | — | ✅ フレームワーク側 | ✅ 除去 | ❌ **なし** | ✅ |
+| メールボックス設定（フィルタ、不在通知） | ❌ スコープ外 | ❌ | フィルタ | フィルタ | ✅ | ❌ |
+| ツール数 | 24 | 11〜16 | 14（Gmail分） | 30 | 64 | 11 |
+| リフレッシュトークンの保持者 | 自分 | 事業者 | 自分 | 自分 | 自分 | 自分 |
 
-読み取りにも上限があります。本文とスレッドの取得には文字数の上限、添付ファイルの取得にはサイズの上限を設けているので、長いメーリングリストのスレッドがアシスタントのコンテキストを圧迫することはありません。
+[`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp)はこの分野で最も完成度が高く、GmailだけでなくWorkspace全体を扱えます。Gmailの署名の付加やURLからの添付取得など、gmail-mcpにない機能もあります。[`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp)は64個のツールで不在通知・代理アクセス・S/MIMEまで届きます。これらは`gmail.settings.*`配下の機能で、gmail-mcpはこのスコープを要求しないため、認可情報が漏れた場合もそこには手が届きません。
+
+残りの差は主に2つの設計から生まれます。呼び出しの引数でアカウントを切り替える方式では、1つの認可情報が接続済みのすべてのメールボックスに届きます。接続にメールボックスを固定する方式なら、引数を間違えてもどこにも届きません。読み取りでは、ローカル型のサーバーはすべてのMIMEパートをUTF-8として復号するため、ISO-2022-JPやShift_JISのメールは文字化けし、Gmailが添付データとして返す長い本文は空のまま返ってきます。
+
+</details>
 
 ---
 
 ## 🚀 導入
+
 
 所要時間は10分ほどです。独自ドメインを設定したCloudflareアカウント、[Bun](https://bun.sh)、Googleアカウントを用意してください。
 
@@ -84,35 +104,25 @@ Claude Codeでは`/mcp`を実行し、接続ごとに対応するGoogleアカウ
 
 ---
 
-## ⚙️ 設定
+## 🔮 できること
 
-### サインインを許可するアカウント
 
-`ALLOWED_EMAILS`で指定します。同意画面のあと、認可情報を発行する前に、Googleが確認済みとして返したメールアドレスと照合します。
+**読む** — `whoami` · `search_messages` · `get_message` · `get_thread` · `get_attachment`
 
-| 値 | サインインできるアカウント |
-| :-- | :-- |
-| *(空)* | なし |
-| `you@gmail.com, work@company.com` | 指定したアカウントのみ |
-| `*@company.com` | そのドメインのアカウント |
-| `*` | 確認済みのGoogleアカウントすべて |
+**書く** — `send_message` · `reply_all` · `forward_message` · `create_draft` · `update_draft` · `send_draft` · `delete_draft` · `list_drafts`
 
-認可情報は、サインインに使ったGoogleアカウントにだけ紐づきます。`ALLOWED_EMAILS`の許可範囲を広げても、既存の接続からアクセスできるアカウントは増えません。`*`を指定すると、第三者が自分のメールを扱うために、このデプロイとGoogle OAuthクライアントのクォータを使えるようになります。
+**整理する** — `list_labels` · `create_label` · `update_label` · `delete_label` · `modify_labels` · `modify_thread_labels` · `batch_modify_messages` · `trash_message` · `untrash_message` · `trash_thread` · `untrash_thread`
 
-### 上限
+送信するメールの構造は、通常のメールクライアントが組み立てるものと同じです。プレーンテキストにHTML版を添え、ファイルを添付し、`cid:`で参照するインライン画像を埋め込みます。入れ子は`multipart/mixed › multipart/related › multipart/alternative`になります。件名と表示名はRFC 2047、ファイル名はRFC 2231で符号化するので、日本語、中国語、絵文字も文字化けせずに送受信できます。
 
-第三者に公開した場合に利用枠を使い切られないよう、2つの上限を設けています。どちらも`wrangler.jsonc`の`vars`で変更できます。
+`reply_all`は元メールの`Reply-To`・`From`・`To`・`Cc`を読み、自分のアドレスを除いて宛先を組み立て、`References`の連鎖を引き継ぎ、送信する形式に合わせて原文を引用します。`forward_message`では元メールのヘッダを再現し、添付ファイルを引き継いで転送できます。
 
-| 設定 | 既定値 | 制限する対象 |
-| :-- | :-- | :-- |
-| `MAX_ACCOUNTS` | `25` | サインインを許可するGoogleアカウントの総数。上限に達しても接続済みのアカウントはそのまま使えて、新規のサインインだけを断ります。Googleは審査前のアプリを100ユーザーに制限しているので、それ以下に収めてください。 |
-| `CALLS_PER_MINUTE` | `120` | 1アカウントが1分間にGmail APIを呼び出せる回数。セッションをまたいで合算します。 |
-
-変更したあとは再デプロイしてください。レート制限にはCloudflareのレートリミッターを使うので、`unsafe.bindings`の`limit`も同じ値に揃えます。個人で使う場合は、既定値のままで問題ありません。
+読み取りにも上限があります。本文とスレッドの取得には文字数の上限、添付ファイルの取得にはサイズの上限を設けているので、長いメーリングリストのスレッドがアシスタントのコンテキストを圧迫することはありません。
 
 ---
 
 ## 🏗 仕組み
+
 
 1つのWorkerで2つのOAuthフローを処理します。MCPクライアントはWorkerに接続するための認証を受け、WorkerはGoogleからメールボックスへのアクセス認可を受けます。MCPクライアントにGoogleのトークンは渡らず、GoogleにMCP側の認証情報は渡りません。
 
@@ -174,7 +184,38 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 
 ---
 
+## 🔑 サインインできるアカウント
+
+
+`ALLOWED_EMAILS`で指定します。同意画面のあと、認可情報を発行する前に、Googleが確認済みとして返したメールアドレスと照合します。
+
+| 値 | サインインできるアカウント |
+| :-- | :-- |
+| *(空)* | なし |
+| `you@gmail.com, work@company.com` | 指定したアカウントのみ |
+| `*@company.com` | そのドメインのアカウント |
+| `*` | 確認済みのGoogleアカウントすべて |
+
+認可情報は、サインインに使ったGoogleアカウントにだけ紐づきます。`ALLOWED_EMAILS`の許可範囲を広げても、既存の接続からアクセスできるアカウントは増えません。`*`を指定すると、第三者が自分のメールを扱うために、このデプロイとGoogle OAuthクライアントのクォータを使えるようになります。
+
+---
+
+## 📊 上限
+
+
+第三者に公開した場合に利用枠を使い切られないよう、2つの上限を設けています。どちらも`wrangler.jsonc`の`vars`で変更できます。
+
+| 設定 | 既定値 | 制限する対象 |
+| :-- | :-- | :-- |
+| `MAX_ACCOUNTS` | `25` | サインインを許可するGoogleアカウントの総数。上限に達しても接続済みのアカウントはそのまま使えて、新規のサインインだけを断ります。Googleは審査前のアプリを100ユーザーに制限しているので、それ以下に収めてください。 |
+| `CALLS_PER_MINUTE` | `120` | 1アカウントが1分間にGmail APIを呼び出せる回数。セッションをまたいで合算します。 |
+
+変更したあとは再デプロイしてください。レート制限にはCloudflareのレートリミッターを使うので、`unsafe.bindings`の`limit`も同じ値に揃えます。個人で使う場合は、既定値のままで問題ありません。
+
+---
+
 ## 🔒 セキュリティ
+
 
 自分で運用する場合も、CloudflareやGoogleへの信頼は必要です。トークンとメール本文の保存先を以下に示します。
 
@@ -189,6 +230,7 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 ---
 
 ## ✅ テスト
+
 
 66件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定を検証しています。
 
@@ -207,6 +249,7 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 
 ## 🛠 開発
 
+
 ```sh
 bun run dev     # wrangler dev、:8788
 bun run check   # biome + tsc
@@ -215,11 +258,17 @@ bun run assets  # ライト・ダークの図を再生成
 bun run deploy
 ```
 
+---
+
 ## 📮 お問い合わせ
+
 
 不具合の報告や機能のご要望は、[Issues](https://github.com/mkpoli/gmail-mcp/issues)へお寄せください。
 
+---
+
 ## ライセンス
+
 
 Copyright © 2026 mkpoli. [MIT License](./LICENSE)で公開しています。
 

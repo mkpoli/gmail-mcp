@@ -298,6 +298,12 @@ bun run assets  # regenerate the light and dark diagrams
 bun run deploy
 ```
 
+## Questions and bugs
+
+Open an [issue](https://github.com/mkpoli/gmail-mcp/issues).
+
+---
+
 ## License
 
 Copyright © 2026 mkpoli. Released under the [MIT License](./LICENSE).

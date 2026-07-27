@@ -285,6 +285,12 @@ bun run deploy
 
 ---
 
+## 反馈
+
+有问题或者想要新功能，欢迎提[issue](https://github.com/mkpoli/gmail-mcp/issues)。
+
+---
+
 ## 许可
 
 Copyright © 2026 mkpoli。以[MIT License](./LICENSE)发布。
