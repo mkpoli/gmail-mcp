@@ -6,9 +6,9 @@ Gmail を Claude などの AI アシスタントにつなぐ。複数アカウ�
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![23 tools](https://img.shields.io/badge/tools-23-0b7285)](#できること)
-[![tests](https://img.shields.io/badge/tests-61_passing-success?logo=bun&logoColor=white)](#開発)
+[![tests](https://img.shields.io/badge/tests-66_passing-success?logo=bun&logoColor=white)](#開発)
 
-*[English README](./README.md)*
+*[English README](./README.md) · [简体中文](./README.zh.md)*
 
 <p align="center">
 <picture>
@@ -155,12 +155,12 @@ Gmail 自体は [REST API](https://developers.google.com/workspace/gmail/api/ref
 ```sh
 bun run dev     # wrangler dev、:8788
 bun run check   # biome + tsc
-bun test        # 単体テスト 61 件
+bun test        # 単体テスト 66 件
 bun run assets  # ライト・ダークの図を再生成
 bun run deploy
 ```
 
-テストが見ているのは、メール構築（MIME の入れ子、RFC 2047 の折り返し、RFC 2231 のファイル名、CR/LF の拒否、base64 の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Google のトークン処理、サインイン許可リストの判定。
+66 件の単体テストが見ているのは、メール構築（MIME の入れ子、RFC 2047 の折り返し、RFC 2231 のファイル名、CR/LF の拒否、base64 の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Google のトークン処理、サインイン許可リストの判定。
 
 実際の Gmail アカウント間でも全ツールを通してある。日本語の件名は複数の encoded word に折り返されて復元され、絵文字・ZWJ・アラビア語・結合文字・稀少漢字はそのまま往復した。`請求書.csv` は送信・受信・再ダウンロードでバイト単位に一致し、`cid:` のインライン画像は受信側で表示された。2つのアカウントを同時に接続した状態で、一方のメッセージ ID をもう一方から読むと `404` が返る。
 
