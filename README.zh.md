@@ -1,7 +1,5 @@
 # gmail-mcp
 
-**给AI助手接上Gmail。多个账号同时在线，部署在你自己的服务器上。**
-
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
@@ -19,11 +17,9 @@
 </picture>
 </p>
 
-**gmail-mcp**把Gmail接到Claude以及任何[MCP](https://modelcontextprotocol.io/)客户端上。搜索和阅读邮件、发送和带引用的全部回复、转发、处理附件与内嵌图片、管理草稿、标签和会话——还可以在多个Google账号上同时进行。
+**gmail-mcp**是一个把Gmail接入Claude等MCP客户端的工具，可以同时连接多个Google账号，支持搜索、阅读、发送、全部回复、转发，以及附件和内嵌图片。
 
-服务跑在**你自己的Cloudflare Worker**上，经由网络访问：笔记本上的Claude Code、浏览器里的claude.ai、手机上的Claude，连的都是同一个地址。每条连接登录**一个**Google账号，Google的refresh token保存在**你自己**的Cloudflare账号里。
-
-找到这里的人多半因为两件事。Claude和Google内置的Gmail连接器可以读信、写草稿，但**不能发送**，并且一个助手账号只能绑定一个Google账号。能发信的方案大多是本地进程，坐在电脑前好用，手机上够不着。
+服务跑在你自己的Cloudflare Worker上，笔记本上的Claude Code、浏览器里的claude.ai、手机上的Claude连的都是同一个地址。每条连接登录一个Google账号，refresh token保存在你自己的Cloudflare账号里。
 
 ---
 
