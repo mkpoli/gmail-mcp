@@ -642,11 +642,17 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 }
 
 function collectAttachments(payload: any) {
-	const out: { filename: string; mimeType: string; size: number }[] = [];
+	// attachmentId is what get_attachment needs, so it belongs in every listing.
+	const out: { filename: string; mimeType: string; size: number; attachmentId: string }[] = [];
 	const walk = (p: any) => {
 		if (!p) return;
 		if (p.filename && p.body?.attachmentId) {
-			out.push({ filename: p.filename, mimeType: p.mimeType, size: p.body.size });
+			out.push({
+				filename: p.filename,
+				mimeType: p.mimeType,
+				size: p.body.size,
+				attachmentId: p.body.attachmentId,
+			});
 		}
 		(p.parts ?? []).forEach(walk);
 	};
