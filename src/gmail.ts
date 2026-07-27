@@ -145,6 +145,46 @@ export function encodeAddressList(value: string): string {
 		.join(", ");
 }
 
+// RFC 5322 §2.1.1 caps a line at 998 octets and recommends 78, so a long
+// recipient list or subject has to fold. Folding inserts CRLF before existing
+// whitespace; a receiver unfolds by dropping the CRLF, which is why the break
+// only ever lands on a space outside a quoted string. Values that already
+// contain CRLF arrived folded — encoded-words do their own — and are left be.
+function foldHeader(line: string): string {
+	const LIMIT = 78;
+	if (line.length <= LIMIT || line.includes("\r\n")) return line;
+
+	const tokens: string[] = [];
+	let buffer = "";
+	let quoted = false;
+	for (let i = 0; i < line.length; i++) {
+		const ch = line[i];
+		if (ch === '"' && line[i - 1] !== "\\") quoted = !quoted;
+		if (ch === " " && !quoted) {
+			tokens.push(buffer);
+			buffer = "";
+			continue;
+		}
+		buffer += ch;
+	}
+	tokens.push(buffer);
+
+	const lines: string[] = [];
+	let current = "";
+	for (const token of tokens) {
+		if (!current) {
+			current = token;
+		} else if (current.length + 1 + token.length <= LIMIT) {
+			current += ` ${token}`;
+		} else {
+			lines.push(current);
+			current = token;
+		}
+	}
+	lines.push(current);
+	return lines.join("\r\n ");
+}
+
 // A media type reaches the header as a bare `type/subtype`; anything past a
 // semicolon would add parameters of the caller's choosing, such as a second
 // name= that parsers resolve differently from the real filename.
@@ -303,7 +343,7 @@ export function buildRfc822({
 		...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
 		...(references ? [`References: ${references}`] : []),
 		"MIME-Version: 1.0",
-	];
+	].map(foldHeader);
 
 	// Innermost: the readable body, as plain text or plain+HTML alternative.
 	let core: string[] = htmlBody

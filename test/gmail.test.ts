@@ -214,6 +214,21 @@ describe("buildRfc822", () => {
 		expect(header).toBe('To: "O\\"Brien, Pat" <p@example.com>');
 	});
 
+	test("folds long headers under the RFC 5322 line limit", () => {
+		const many = Array.from({ length: 60 }, (_, i) => `person${i}@example.com`).join(", ");
+		const subject = `Re: ${"project update ".repeat(80)}`;
+		const raw = buildRfc822({ to: many, subject, body: "b" });
+		for (const line of raw.split("\r\n")) {
+			expect(line.length).toBeLessThanOrEqual(998);
+		}
+		// every recipient survives the fold
+		const unfolded = raw.replace(/\r\n[ \t]/g, " ");
+		const to = unfolded.split("\r\n").find((l) => l.startsWith("To:")) ?? "";
+		expect(to.match(/person\d+@example\.com/g)?.length).toBe(60);
+		const subjectLine = unfolded.split("\r\n").find((l) => l.startsWith("Subject:")) ?? "";
+		expect(subjectLine).toContain("project update");
+	});
+
 	test("keeps bare addresses untouched", () => {
 		const raw = buildRfc822({ to: "a@example.com, b@example.org", subject: "s", body: "b" });
 		expect(raw).toContain("To: a@example.com, b@example.org");
