@@ -5,6 +5,7 @@ import {
 	exchangeGoogleCode,
 	fetchGoogleUserInfo,
 	getGoogleAuthorizeUrl,
+	isEmailAllowed,
 	type Props,
 } from "./utils";
 import {
@@ -177,14 +178,7 @@ app.get("/callback", async (c) => {
 	try {
 		const user = await fetchGoogleUserInfo(tokens.access_token);
 
-		// The MCP endpoint is public and clients self-register, so mailbox access
-		// is fail-closed: only verified accounts listed in ALLOWED_EMAILS may
-		// complete auth.
-		const allowed = (c.env.ALLOWED_EMAILS ?? "")
-			.split(",")
-			.map((e) => e.trim().toLowerCase())
-			.filter(Boolean);
-		if (!user.verified || !allowed.includes(user.email.toLowerCase())) {
+		if (!user.verified || !isEmailAllowed(user.email, c.env.ALLOWED_EMAILS)) {
 			return c.text("This Google account is not allowed on this server", 403);
 		}
 

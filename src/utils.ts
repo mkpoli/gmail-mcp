@@ -9,6 +9,28 @@ export type Props = {
 	expiresAt: number;
 };
 
+// The MCP endpoint is public and clients self-register, so who may finish a
+// Google sign-in is decided by ALLOWED_EMAILS. Patterns, comma-separated:
+//   user@example.com  a single account
+//   *@example.com     any account in that domain
+//   *                 any verified Google account, making the server a relay
+//                     anyone may bind to their own mailbox
+// An empty setting admits no one. A grant only ever reaches the mailbox that
+// authenticated it, so a wider list never widens access to existing accounts.
+export function isEmailAllowed(email: string, allowList: string | undefined): boolean {
+	const address = email.trim().toLowerCase();
+	const at = address.indexOf("@");
+	if (at < 0) return false;
+	const domain = address.slice(at);
+	const patterns = (allowList ?? "")
+		.split(",")
+		.map((e) => e.trim().toLowerCase())
+		.filter(Boolean);
+	return patterns.some(
+		(p) => p === "*" || p === address || (p.startsWith("*@") && p.slice(1) === domain),
+	);
+}
+
 export function getGoogleAuthorizeUrl({
 	client_id,
 	redirect_uri,

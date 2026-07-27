@@ -56,7 +56,7 @@ Requirements: a Cloudflare account, a domain on it, [bun](https://bun.sh), and a
    bunx wrangler secret put GOOGLE_CLIENT_ID
    bunx wrangler secret put GOOGLE_CLIENT_SECRET
    bunx wrangler secret put COOKIE_ENCRYPTION_KEY      # openssl rand -hex 32
-   bunx wrangler secret put ALLOWED_EMAILS             # comma-separated addresses
+   bunx wrangler secret put ALLOWED_EMAILS             # addresses, *@domain, or *
    bun run deploy
    ```
 
@@ -73,7 +73,7 @@ For local development, copy `.dev.vars.example` to `.dev.vars`, fill in the same
 
 ## Security posture
 
-- **Fail-closed access.** The MCP endpoint is public and clients self-register, so mailbox access hinges on the allowlist: a Google sign-in completes only for a verified email listed in `ALLOWED_EMAILS`. An empty list admits no one.
+- **Access is what `ALLOWED_EMAILS` says.** The MCP endpoint is public and clients self-register, so the allowlist decides who may finish a Google sign-in: exact addresses, `*@your-domain.com` for a whole domain, or `*` to accept any verified Google account. An empty setting admits no one. A grant only ever reaches the mailbox that authenticated it, so widening the list never widens access to accounts already connected — what `*` does grant strangers is use of this deployment, and of its Google OAuth client's quota, as a relay to their own mail.
 - **Nothing stored but tokens.** Mail passes through; message content never touches KV, Durable Object storage, or logs. Refresh tokens live encrypted inside their grant; the hour-lived access token is cached in the session's Durable Object.
 - **Injection defenses.** Outgoing header values reject CR/LF and NUL, closing the header-smuggling path from prompt-injected tool arguments. Message and thread bodies are truncated at fixed budgets before they reach the client.
 - **Scope minimalism.** `gmail.modify` withholds `gmail.settings.*` and permanent delete — the classic mailbox-backdoor vectors (auto-forwarding rules, filter exfiltration) are outside what a stolen grant could do.
