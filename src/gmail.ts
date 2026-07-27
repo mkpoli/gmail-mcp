@@ -130,7 +130,11 @@ export function encodeAddressList(value: string): string {
 			const match = address.match(/^(.*?)\s*<([^>]*)>$/);
 			if (!match) return address;
 			const [, rawName, addr] = match;
-			const name = rawName.trim().replace(/^"(.*)"$/, "$1");
+			const trimmed = rawName.trim();
+			// Unwrap a quoted display name back to its literal text, quoted-pairs
+			// included, so re-quoting below does not escape the escapes.
+			const quotedName = /^".*"$/s.test(trimmed);
+			const name = quotedName ? trimmed.slice(1, -1).replace(/\\(.)/g, "$1") : trimmed;
 			if (!name) return `<${addr}>`;
 			if (!/^[\x20-\x7e]*$/.test(name)) return `${encodeHeader(name)} <${addr}>`;
 			// RFC 5322 specials force a quoted-string display name.

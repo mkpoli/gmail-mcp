@@ -203,6 +203,17 @@ describe("buildRfc822", () => {
 		expect(header.split("<").length - 1).toBe(2);
 	});
 
+	test("does not double-escape an already-quoted display name", () => {
+		// RFC 5322 quoted-pair: the source already escapes the inner quote
+		const raw = buildRfc822({
+			to: '"O\\"Brien, Pat" <p@example.com>',
+			subject: "s",
+			body: "b",
+		});
+		const header = raw.split("\r\n").find((l) => l.startsWith("To:")) ?? "";
+		expect(header).toBe('To: "O\\"Brien, Pat" <p@example.com>');
+	});
+
 	test("keeps bare addresses untouched", () => {
 		const raw = buildRfc822({ to: "a@example.com, b@example.org", subject: "s", body: "b" });
 		expect(raw).toContain("To: a@example.com, b@example.org");
