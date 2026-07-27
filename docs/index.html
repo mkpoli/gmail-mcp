@@ -114,7 +114,7 @@
   <h1>gmail<span class="dash">-</span>mcp</h1>
   <p class="tagline">Your Gmail accounts, served to any MCP client, from your own Cloudflare Worker. Roughly ten minutes to deploy.</p>
   <div class="pills">
-    <span class="pill">22 tools</span>
+    <span class="pill">23 tools</span>
     <span class="pill">OAuth 2.1 + PKCE</span>
     <span class="pill">multi-account</span>
     <span class="pill">scope gmail.modify</span>
@@ -144,10 +144,10 @@ gcloud services enable gmail.googleapis.com</pre>
 <button data-copy="c1">copy</button>
 </div>
 
-<p>The consent screen and the OAuth client have no API, so these two are browser steps:</p>
+<p>The consent screen and the OAuth client have no API, so these two happen in the <a href="https://console.cloud.google.com/">Cloud console</a>:</p>
 <ol class="steps">
-  <li><b>OAuth consent screen</b> → <i>External</i> → app name and your email. While the app is unverified, add every mailbox you plan to connect under <b>Test users</b>.</li>
-  <li><b>Credentials → Create credentials → OAuth client ID</b> → <i>Web application</i>, with one authorized redirect URI:
+  <li><a href="https://console.cloud.google.com/auth/overview"><b>OAuth consent screen</b></a> → <i>External</i> → app name and your email. While the app is unverified, add every mailbox you plan to connect under <b>Test users</b>.</li>
+  <li><a href="https://console.cloud.google.com/apis/credentials"><b>Credentials</b></a> <b>→ Create credentials → OAuth client ID</b> → <i>Web application</i>, with one authorized redirect URI:
     <pre>https://&lt;your-domain&gt;/callback</pre>
     Keep the client ID and secret for the next step.</li>
 </ol>

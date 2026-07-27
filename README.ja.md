@@ -52,10 +52,10 @@ gcloud config set project "$PROJECT"
 gcloud services enable gmail.googleapis.com
 ```
 
-続く2つの手順にAPIは用意されていないので、コンソールで操作してください。
+続く2つの手順にAPIは用意されていないので、[Google Cloudコンソール](https://console.cloud.google.com/)で操作してください。
 
-- **OAuth同意画面** → *External*。審査前の状態では、接続したいメールアドレスを**テストユーザー**に登録します。
-- **認証情報 → 認証情報を作成 → OAuthクライアントID** → *ウェブアプリケーション*。承認済みリダイレクトURIに`https://<自分のドメイン>/callback`を追加し、クライアントIDとシークレットを控えておきます。
+- [**OAuth同意画面**](https://console.cloud.google.com/auth/overview) → *External*。審査前の状態では、接続したいメールアドレスを**テストユーザー**に登録します。
+- [**認証情報**](https://console.cloud.google.com/apis/credentials) **→ 認証情報を作成 → OAuthクライアントID** → *ウェブアプリケーション*。承認済みリダイレクトURIに`https://<自分のドメイン>/callback`を追加し、クライアントIDとシークレットを控えておきます。
 
 ### 2. Workerをデプロイする
 

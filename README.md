@@ -83,10 +83,10 @@ gcloud config set project "$PROJECT"
 gcloud services enable gmail.googleapis.com
 ```
 
-Google exposes no API for the next two steps, so they happen in the console:
+Google exposes no API for the next two steps, so they happen in the [Cloud console](https://console.cloud.google.com/):
 
-- **OAuth consent screen** → *External*. While the app is unverified, add each mailbox you plan to connect under **Test users**.
-- **Credentials → Create credentials → OAuth client ID** → *Web application*, with `https://<your-domain>/callback` as an authorized redirect URI. Keep the client ID and secret.
+- [**OAuth consent screen**](https://console.cloud.google.com/auth/overview) → *External*. While the app is unverified, add each mailbox you plan to connect under **Test users**.
+- [**Credentials**](https://console.cloud.google.com/apis/credentials) **→ Create credentials → OAuth client ID** → *Web application*, with `https://<your-domain>/callback` as an authorized redirect URI. Keep the client ID and secret.
 
 ### 2 · Deploy the Worker
 

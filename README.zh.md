@@ -71,10 +71,10 @@ gcloud config set project "$PROJECT"
 gcloud services enable gmail.googleapis.com
 ```
 
-接下来两步Google没有开放API，只能在控制台里做：
+接下来两步Google没有开放API，只能在[Google Cloud控制台](https://console.cloud.google.com/)里做：
 
-- **OAuth同意屏幕** → *External*。应用未通过验证期间，把计划连接的每个邮箱加进**测试用户**。
-- **凭据 → 创建凭据 → OAuth客户端ID** → *Web应用*，把`https://<你的域名>/callback`加进已获授权的重定向URI。客户端ID和密钥记下来。
+- [**OAuth同意屏幕**](https://console.cloud.google.com/auth/overview) → *External*。应用未通过验证期间，把计划连接的每个邮箱加进**测试用户**。
+- [**凭据**](https://console.cloud.google.com/apis/credentials) **→ 创建凭据 → OAuth客户端ID** → *Web应用*，把`https://<你的域名>/callback`加进已获授权的重定向URI。客户端ID和密钥记下来。
 
 ### 2 · 部署Worker
 
