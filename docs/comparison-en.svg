@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" width="1200" height="675" role="img"
+     aria-label="Gmail MCP feature comparison">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="0.55" stop-color="#12263f"/>
+      <stop offset="1" stop-color="#0e3033"/>
+    </linearGradient>
+    <linearGradient id="mine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F6821F" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F6821F" stop-opacity="0.05"/>
+    </linearGradient>
+    <style>
+      text { fill: #ffffff; }
+      .ja { font-family: "Noto Sans CJK JP", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; }
+      .en { font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .title { font-size: 29px; font-weight: 700; }
+      .subtitle { font-size: 13.5px; fill-opacity: 0.55; }
+      .head { font-size: 19px; font-weight: 700; }
+      .head-sm { font-size: 15.5px; font-weight: 700; }
+      .headsub { font-size: 11.5px; fill-opacity: 0.55; }
+      .row { font-size: 19px; font-weight: 600; }
+      .rowsub { font-size: 11.5px; fill-opacity: 0.5; }
+      .mark { font-size: 24px; font-weight: 700; }
+      .word { font-size: 15px; font-weight: 600; }
+      .note { font-size: 11px; fill-opacity: 0.62; }
+      .foot { font-size: 12px; fill-opacity: 0.45; }
+      .grid { stroke: #ffffff; stroke-opacity: 0.15; stroke-width: 1; }
+      .yes { fill: #4ade80; }
+      .no { fill: #f87171; }
+      .part { fill: #fbbf24; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="675" fill="url(#bg)"/>
+
+  <text class="en title" x="52" y="52">Gmail MCP servers, compared</text>
+  <text class="en subtitle" x="52" y="75">Few servers combine several mailboxes, sending, and attachments</text>
+
+  <rect x="356" y="96" width="196" height="516" rx="8" fill="url(#mine)" stroke="#F6821F" stroke-opacity="0.45" stroke-width="1.5"/>
+
+  <text class="en head" x="454" y="130" text-anchor="middle">gmail-mcp</text>
+  <text class="en headsub" x="454" y="149" text-anchor="middle">this project</text>
+
+  <text class="en head-sm" x="640" y="130" text-anchor="middle">Built-in connectors</text>
+  <text class="en headsub" x="640" y="149" text-anchor="middle">Claude · Google</text>
+
+  <text class="en head-sm" x="828" y="130" text-anchor="middle">google_workspace_mcp</text>
+  <text class="en headsub" x="828" y="149" text-anchor="middle">taylorwilsdon · 2.9k★</text>
+
+  <text class="en head-sm" x="1016" y="130" text-anchor="middle">Gmail-MCP-Server</text>
+  <text class="en headsub" x="1016" y="149" text-anchor="middle">ArtyMcLabin · 212★</text>
+
+  <line class="grid" x1="52" y1="164" x2="1148" y2="164"/>
+  <line class="grid" x1="356" y1="96" x2="356" y2="612"/>
+  <line class="grid" x1="552" y1="96" x2="552" y2="612"/>
+  <line class="grid" x1="734" y1="96" x2="734" y2="612"/>
+  <line class="grid" x1="922" y1="96" x2="922" y2="612"/>
+
+  <!-- 1 · where it runs -->
+  <line class="grid" x1="52" y1="238" x2="1148" y2="238"/>
+  <text class="en row" x="52" y="196">Where it runs</text>
+  <text class="en rowsub" x="52" y="216">hosting model</text>
+  <text class="en word yes" x="454" y="200" text-anchor="middle">Workers</text>
+  <text class="en note" x="454" y="220" text-anchor="middle">no server to run</text>
+  <text class="en word" x="640" y="200" text-anchor="middle">vendor-hosted</text>
+  <text class="en note" x="640" y="220" text-anchor="middle">nothing to deploy</text>
+  <text class="en word part" x="828" y="200" text-anchor="middle">your own server</text>
+  <text class="en note" x="828" y="220" text-anchor="middle">always-on process</text>
+  <text class="en word part" x="1016" y="200" text-anchor="middle">local only</text>
+  <text class="en note" x="1016" y="220" text-anchor="middle">stdio</text>
+
+  <!-- 2 · multi account -->
+  <line class="grid" x1="52" y1="312" x2="1148" y2="312"/>
+  <text class="en row" x="52" y="270">Several mailboxes</text>
+  <text class="en rowsub" x="52" y="290">connected at the same time</text>
+  <text class="en mark yes" x="454" y="278" text-anchor="middle">✓</text>
+  <text class="en note" x="454" y="298" text-anchor="middle">one per connection</text>
+  <text class="en mark no" x="640" y="284" text-anchor="middle">✕</text>
+  <text class="en mark yes" x="828" y="278" text-anchor="middle">✓</text>
+  <text class="en note" x="828" y="298" text-anchor="middle">chosen per call</text>
+  <text class="en mark no" x="1016" y="278" text-anchor="middle">✕</text>
+  <text class="en note" x="1016" y="298" text-anchor="middle">send-as aliases only</text>
+
+  <!-- 3 · send -->
+  <line class="grid" x1="52" y1="386" x2="1148" y2="386"/>
+  <text class="en row" x="52" y="344">Send mail</text>
+  <text class="en rowsub" x="52" y="364">send</text>
+  <text class="en mark yes" x="454" y="358" text-anchor="middle">✓</text>
+  <text class="en mark no" x="640" y="352" text-anchor="middle">✕</text>
+  <text class="en note" x="640" y="372" text-anchor="middle">drafts only</text>
+  <text class="en mark yes" x="828" y="358" text-anchor="middle">✓</text>
+  <text class="en mark yes" x="1016" y="358" text-anchor="middle">✓</text>
+
+  <!-- 4 · attachments -->
+  <line class="grid" x1="52" y1="460" x2="1148" y2="460"/>
+  <text class="en row" x="52" y="418">Attachments, images</text>
+  <text class="en rowsub" x="52" y="438">files and cid: inline images</text>
+  <text class="en mark yes" x="454" y="432" text-anchor="middle">✓</text>
+  <text class="en word" x="640" y="430" text-anchor="middle">undocumented</text>
+  <text class="en note" x="640" y="448" text-anchor="middle">not in the spec</text>
+  <text class="en mark yes" x="828" y="432" text-anchor="middle">✓</text>
+  <text class="en mark yes" x="1016" y="432" text-anchor="middle">✓</text>
+
+  <!-- 5 · reply all -->
+  <line class="grid" x1="52" y1="534" x2="1148" y2="534"/>
+  <text class="en row" x="52" y="492">Reply-all with quoting</text>
+  <text class="en rowsub" x="52" y="512">recipients computed for you</text>
+  <text class="en mark yes" x="454" y="506" text-anchor="middle">✓</text>
+  <text class="en mark no" x="640" y="506" text-anchor="middle">✕</text>
+  <text class="en mark part" x="828" y="500" text-anchor="middle">△</text>
+  <text class="en note" x="828" y="520" text-anchor="middle">drafts quote only</text>
+  <text class="en mark part" x="1016" y="500" text-anchor="middle">△</text>
+  <text class="en note" x="1016" y="520" text-anchor="middle">no quoting</text>
+
+  <!-- 6 · token custody -->
+  <line class="grid" x1="52" y1="608" x2="1148" y2="608"/>
+  <text class="en row" x="52" y="566">Who holds your token</text>
+  <text class="en rowsub" x="52" y="586">the Google refresh token</text>
+  <text class="en word yes" x="454" y="574" text-anchor="middle">you</text>
+  <text class="en note" x="454" y="592" text-anchor="middle">own Worker</text>
+  <text class="en word" x="640" y="574" text-anchor="middle">the vendor</text>
+  <text class="en note" x="640" y="592" text-anchor="middle">Google · Anthropic</text>
+  <text class="en word yes" x="828" y="574" text-anchor="middle">you</text>
+  <text class="en note" x="828" y="592" text-anchor="middle">own server</text>
+  <text class="en word yes" x="1016" y="574" text-anchor="middle">you</text>
+  <text class="en note" x="1016" y="592" text-anchor="middle">own PC</text>
+
+  <text class="en foot" x="52" y="646">github.com/mkpoli/gmail-mcp · MIT · from each repository and vendor docs, July 2026</text>
+</svg>

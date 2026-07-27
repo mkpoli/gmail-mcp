@@ -5,12 +5,16 @@ Gmail を Claude などの AI アシスタントにつなぐ。複数アカウ�
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
+[![23 tools](https://img.shields.io/badge/tools-23-0b7285)](#できること)
+[![tests](https://img.shields.io/badge/tests-61_passing-success?logo=bun&logoColor=white)](#開発)
 
 *[English README](./README.md)*
 
-Claude や Google が用意している Gmail コネクタは、メールを読んで下書きを作るところで止まる。アシスタント1つにつき Google アカウントも1つ、送信はできない。送信できる実装はたいてい手元の PC で動くので、外出先のスマートフォンからは届かない。
+**gmail-mcp** は Gmail を Claude をはじめとする [MCP](https://modelcontextprotocol.io/) クライアントにつなぐ。**検索と閲覧**、引用付きの**送信と全員返信**、**転送**、**添付とインライン画像**、下書き・ラベル・スレッドの操作までを、**複数の Google アカウントで同時に**扱える。
 
-gmail-mcp は三つ目の道を取る。自分のドメインの Cloudflare Workers に置くから、どの端末からでも同じサーバーに届く。そして接続ごとに別々の Google アカウントでサインインする。仕事用と個人用が並んで動き、リフレッシュトークンは自分の Cloudflare アカウントから外に出ない。
+置き場所は**自分の Cloudflare Worker**。同じ接続先に、ノート PC の Claude Code からも、ブラウザの claude.ai からも、スマートフォンからも届く。接続1つにつき Google アカウントは1つ、リフレッシュトークンは**自分の** Cloudflare アカウントから外に出ない。
+
+ここに来る理由はたいてい二つある。Claude と Google の公式 Gmail コネクタは、読むことと下書きまではできるが**送信ができず**、アシスタント1つにつき Google アカウントも1つに限られる。送信できる実装の多くはローカルのプロセスで、机の前では快適でも、外出先のスマートフォンからは見えない。
 
 <div align="center">
 <img src="./docs/comparison.svg" alt="Gmail MCP サーバーの機能比較" width="820">
@@ -20,7 +24,7 @@ gmail-mcp は三つ目の道を取る。自分のドメインの Cloudflare Work
 
 [google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp) はこの分野でもっとも完成度が高く、Gmail 以外の Workspace 全体を扱える。複数アカウントには対応しているが、呼び出しのたびに宛先アカウントを引数で渡す設計だ。gmail-mcp は接続そのものに1つのメールボックスを結びつけるので、引数の取り違えで別の受信箱に届くことがない。
 
-[shinzo-labs/gmail-mcp](https://github.com/shinzo-labs/gmail-mcp) のツール数は64、こちらは22。差の大半は不在応答・代理アクセス・S/MIME といった設定系 API で、gmail-mcp はこれらを OAuth スコープの外に置いている。理由は後述する。
+[shinzo-labs/gmail-mcp](https://github.com/shinzo-labs/gmail-mcp) のツール数は64、こちらは23。差の大半は不在応答・代理アクセス・S/MIME といった設定系 API で、gmail-mcp はこれらを OAuth スコープの外に置いている。理由は後述する。
 
 ---
 
@@ -71,13 +75,13 @@ Claude Code なら `/mcp` を実行して、それぞれを対応する Google �
 
 **読む** — `whoami` · `search_messages` · `get_message` · `get_thread` · `get_attachment`
 
-**書く** — `send_message` · `reply_all` · `create_draft` · `update_draft` · `send_draft` · `delete_draft` · `list_drafts`
+**書く** — `send_message` · `reply_all` · `forward_message` · `create_draft` · `update_draft` · `send_draft` · `delete_draft` · `list_drafts`
 
 **整理する** — `list_labels` · `create_label` · `update_label` · `delete_label` · `modify_labels` · `modify_thread_labels` · `batch_modify_messages` · `trash_message` · `untrash_message` · `trash_thread` · `untrash_thread`
 
-送信するメールの構造は、通常のメールクライアントが組み立てるものと同じだ。プレーンテキストに HTML 版を添え、ファイルを添付し、`cid:` で参照するインライン画像を埋め込む。入れ子は `multipart/mixed › multipart/related › multipart/alternative` になる。件名とファイル名は RFC 2047 で符号化するので、日本語も中国語も絵文字もそのまま届く。
+送信するメールの構造は、通常のメールクライアントが組み立てるものと同じだ。プレーンテキストに HTML 版を添え、ファイルを添付し、`cid:` で参照するインライン画像を埋め込む。入れ子は `multipart/mixed › multipart/related › multipart/alternative` になる。件名と表示名は RFC 2047、ファイル名は RFC 2231 で符号化するので、日本語も中国語も絵文字もそのまま届く。
 
-`reply_all` は元メールの `Reply-To`・`From`・`To`・`Cc` を読み、自分のアドレスを除いて宛先を組み立て、`References` の連鎖を引き継ぎ、本文をテキストと HTML の両方で引用する。
+`reply_all` は元メールの `Reply-To`・`From`・`To`・`Cc` を読み、自分のアドレスを除いて宛先を組み立て、`References` の連鎖を引き継ぎ、本文をテキストと HTML の両方で引用する。`forward_message` は転送元のヘッダを再現し、元の添付ファイルをそのまま付け直せる。
 
 読み取り側には上限を設けてある。本文とスレッドには文字数、添付にはサイズの上限があり、長大なメーリングリストのスレッドがアシスタントの文脈を埋め尽くすことはない。
 
@@ -117,11 +121,14 @@ Claude Code なら `/mcp` を実行して、それぞれを対応する Google �
 ```sh
 bun run dev     # wrangler dev、:8788
 bun run check   # biome + tsc
-bun test        # 単体テスト
+bun test        # 単体テスト 61 件
+bun run assets  # ライト・ダークの図を再生成
 bun run deploy
 ```
 
-テストが見ているのは、メール構築（MIME の入れ子、RFC 2047 ヘッダ、CR/LF の拒否、base64 の折り返し）、文字コードをまたぐ本文の取り出し、返信先の組み立て、Google のトークン処理、サインイン許可リストの判定。
+テストが見ているのは、メール構築（MIME の入れ子、RFC 2047 の折り返し、RFC 2231 のファイル名、CR/LF の拒否、base64 の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Google のトークン処理、サインイン許可リストの判定。
+
+実際の Gmail アカウント間でも全ツールを通してある。日本語の件名は複数の encoded word に折り返されて復元され、絵文字・ZWJ・アラビア語・結合文字・アイヌ語の小書き仮名はそのまま往復した。`品詞リスト.csv` は送信・受信・再ダウンロードでバイト単位に一致し、`cid:` のインライン画像は受信側で表示された。2つのアカウントを同時に接続した状態で、一方のメッセージ ID をもう一方から読むと `404` が返る。
 
 ## ライセンス
 
