@@ -30,11 +30,11 @@
 
   <!-- wordmark -->
   <text x="140" y="72" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
-        font-size="46" font-weight="700" letter-spacing="-1" fill="currentColor">gmail<tspan fill="url(#warm)">-</tspan>mcp</text>
+        font-size="46" font-weight="700" letter-spacing="-1" fill="#e8eaee">gmail<tspan fill="url(#warm)">-</tspan>mcp</text>
   <text x="142" y="100" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-        font-size="14" fill="currentColor" opacity="0.62">remote MCP server · Cloudflare Workers</text>
+        font-size="14" fill="#e8eaee" opacity="0.62">remote MCP server · Cloudflare Workers</text>
 
   <!-- animated underline -->
-  <rect x="142" y="110" width="330" height="3" rx="1.5" fill="currentColor" opacity="0.12"/>
+  <rect x="142" y="110" width="330" height="3" rx="1.5" fill="#e8eaee" opacity="0.12"/>
   <rect x="142" y="110" width="330" height="3" rx="1.5" fill="url(#sweep)"/>
 </svg>

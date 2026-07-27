@@ -10,7 +10,8 @@
 		"fix": "biome check --write src test",
 		"test": "bun test",
 		"types": "wrangler types",
-		"setup": "bun run scripts/setup.ts"
+		"setup": "bun run scripts/setup.ts",
+		"assets": "bun run scripts/render-assets.ts"
 	},
 	"dependencies": {
 		"@cloudflare/workers-oauth-provider": "^0.8.1",

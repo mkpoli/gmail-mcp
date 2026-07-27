@@ -1,6 +1,10 @@
 <div align="center">
 
-<img src="./docs/logo.svg" alt="gmail-mcp" width="520">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/logo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./docs/logo-light.svg">
+  <img src="./docs/logo-light.svg" alt="gmail-mcp" width="520">
+</picture>
 
 **Your Gmail accounts, served to any MCP client, from your own Cloudflare Worker.**
 
@@ -60,7 +64,11 @@ sequenceDiagram
 ```
 
 <div align="center">
-<img src="./docs/architecture.svg" alt="Request path: client to Worker to Gmail, with KV and Durable Object storage" width="720">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/architecture-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./docs/architecture-light.svg">
+  <img src="./docs/architecture-light.svg" alt="Request path: client to Worker to Gmail, with KV and Durable Object storage" width="720">
+</picture>
 </div>
 
 | Layer | File | What it does |
@@ -303,3 +311,5 @@ Tests cover the RFC 822 builder (nesting order, CRLF rejection, RFC 2047, 76-col
 ## 📄 License
 
 [MIT](./LICENSE). `src/workers-oauth-utils.ts` is vendored from Cloudflare's [remote-mcp-github-oauth demo](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth) (MIT).
+
+<sub>Diagram variants for light and dark themes are generated with `bun run assets`.</sub>
