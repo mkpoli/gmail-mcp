@@ -82,7 +82,7 @@
     <animateTransform attributeName="transform" type="translate" values="0 10;0 10;0 0;0 0;0 0;0 0" keyTimes="0;0.23;0.25;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
     <rect class="bubble" x="24" y="210" width="404" height="86" rx="14"/>
     <text class="ui msg" x="44" y="236">今日中に返信が必要なものが2件です。</text>
-    <text class="ui msg" x="44" y="259" fill-opacity="0.85">・丸山商事：発注書 No.4417 の承認待ち <tspan class="mono" font-size="11.5" fill-opacity="0.55">work</tspan></text>
+    <text class="ui msg" x="44" y="259" fill-opacity="0.85">・丸山商事：発注書No.4417の承認待ち <tspan class="mono" font-size="11.5" fill-opacity="0.55">work</tspan></text>
     <text class="ui msg" x="44" y="281" fill-opacity="0.85">・マンションの更新手続き、金曜締切 <tspan class="mono" font-size="11.5" fill-opacity="0.55">personal</tspan></text>
   </g>
 
@@ -92,7 +92,7 @@
     <animateTransform attributeName="transform" type="translate" values="0 10;0 10;0 0;0 0;0 0;0 0" keyTimes="0;0.40;0.42;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
     <rect class="user" x="386" y="310" width="350" height="62" rx="14"/>
     <text class="ui msg" x="406" y="335">丸山商事に承認済みと返信して。押印済みの</text>
-    <text class="ui msg" x="406" y="357">控えを添付、担当者は全員 Cc のままで。</text>
+    <text class="ui msg" x="406" y="357">控えを添付、担当者は全員Ccのままで。</text>
   </g>
 
   <!-- 6 · tool call — reply_all with an attachment -->
@@ -117,6 +117,6 @@
     <animateTransform attributeName="transform" type="translate" values="0 10;0 10;0 0;0 0;0 0;0 0" keyTimes="0;0.58;0.60;0.94;0.98;1" dur="17s" repeatCount="indefinite"/>
     <rect class="bubble" x="24" y="428" width="424" height="64" rx="14"/>
     <text class="ui msg" x="44" y="454">仕事用アドレスから返信しました。経理宛、</text>
-    <text class="ui msg" x="44" y="476">購買は Cc のまま、押印済み PDF を添付。</text>
+    <text class="ui msg" x="44" y="476">購買はCcのまま、押印済みPDFを添付。</text>
   </g>
 </svg>

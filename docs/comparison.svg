@@ -35,7 +35,7 @@
 
   <rect width="1200" height="675" fill="url(#bg)"/>
 
-  <text class="ja title" x="52" y="52">Gmail MCP サーバー比較</text>
+  <text class="ja title" x="52" y="52">Gmail MCPサーバー比較</text>
   <text class="en subtitle" x="52" y="75">同時に複数アカウント・送信・添付まで揃うものは意外と少ない</text>
 
   <rect x="356" y="96" width="196" height="516" rx="8" fill="url(#mine)" stroke="#F6821F" stroke-opacity="0.45" stroke-width="1.5"/>
@@ -127,5 +127,5 @@
   <text class="ja word yes" x="1016" y="574" text-anchor="middle">自分</text>
   <text class="en note" x="1016" y="592" text-anchor="middle">own PC</text>
 
-  <text class="en foot" x="52" y="646">github.com/mkpoli/gmail-mcp · MIT · 2026-07 時点の各リポジトリ・公式ドキュメントに基づく</text>
+  <text class="en foot" x="52" y="646">github.com/mkpoli/gmail-mcp · MIT · 2026-07時点の各リポジトリ・公式ドキュメントに基づく</text>
 </svg>

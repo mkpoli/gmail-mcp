@@ -35,7 +35,7 @@
 
   <rect width="1200" height="675" fill="url(#bg)"/>
 
-  <text class="ja title" x="52" y="52">Gmail MCP 服务端对比</text>
+  <text class="ja title" x="52" y="52">Gmail MCP服务端对比</text>
   <text class="en subtitle" x="52" y="75">同时支持多账号、发信和附件的并不多</text>
 
   <rect x="356" y="96" width="196" height="516" rx="8" fill="url(#mine)" stroke="#F6821F" stroke-opacity="0.45" stroke-width="1.5"/>
@@ -127,5 +127,5 @@
   <text class="ja word yes" x="1016" y="574" text-anchor="middle">自己</text>
   <text class="en note" x="1016" y="592" text-anchor="middle">own PC</text>
 
-  <text class="en foot" x="52" y="646">github.com/mkpoli/gmail-mcp · MIT · 依据各仓库与官方文档，2026 年 7 月</text>
+  <text class="en foot" x="52" y="646">github.com/mkpoli/gmail-mcp · MIT · 依据各仓库与官方文档，2026年7月</text>
 </svg>
