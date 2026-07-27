@@ -715,7 +715,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		this.server.tool(
 			"create_label",
 			`Create a label in ${account}`,
-			{ name: z.string().describe("Nested labels use '/', e.g. Projects/Ainu") },
+			{ name: z.string().describe("Nested labels use '/', e.g. Projects/Website") },
 			async ({ name }) => {
 				const l = await this.api("/labels", {
 					method: "POST",

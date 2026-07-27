@@ -21,14 +21,14 @@ describe("getGoogleAuthorizeUrl", () => {
 		const url = new URL(
 			getGoogleAuthorizeUrl({
 				client_id: "cid",
-				redirect_uri: "https://gmail-mcp.mkpo.li/callback",
+				redirect_uri: "https://mcp.example.com/callback",
 				scope: "scope-a scope-b",
 				state: "st",
 			}),
 		);
 		expect(url.origin + url.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
 		expect(url.searchParams.get("client_id")).toBe("cid");
-		expect(url.searchParams.get("redirect_uri")).toBe("https://gmail-mcp.mkpo.li/callback");
+		expect(url.searchParams.get("redirect_uri")).toBe("https://mcp.example.com/callback");
 		expect(url.searchParams.get("scope")).toBe("scope-a scope-b");
 		expect(url.searchParams.get("state")).toBe("st");
 		expect(url.searchParams.get("response_type")).toBe("code");
@@ -41,7 +41,7 @@ describe("exchangeGoogleCode", () => {
 	const args = {
 		client_id: "cid",
 		client_secret: "sec",
-		redirect_uri: "https://gmail-mcp.mkpo.li/callback",
+		redirect_uri: "https://mcp.example.com/callback",
 	};
 
 	test("rejects a missing code without calling Google", async () => {

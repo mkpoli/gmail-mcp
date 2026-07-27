@@ -20,11 +20,11 @@ Gmail を Claude などの AI アシスタントにつなぐ。複数アカウ�
 <img src="./docs/comparison.svg" alt="Gmail MCP サーバーの機能比較" width="820">
 </div>
 
-表の見方について、二点だけ補足しておきたい。
+[google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp) はこの分野でもっとも完成度が高い。Gmail だけでなく Workspace 全体を扱い、Gmail の署名の付加や URL からの添付取得など、gmail-mcp にない機能もある。複数アカウントの扱いは、呼び出しのたびに宛先アカウントを引数で渡す設計だ。接続そのものにメールボックスを結びつける gmail-mcp では、引数を間違えてもどこにも届かない。
 
-[google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp) はこの分野でもっとも完成度が高く、Gmail 以外の Workspace 全体を扱える。複数アカウントには対応しているが、呼び出しのたびに宛先アカウントを引数で渡す設計だ。gmail-mcp は接続そのものに1つのメールボックスを結びつけるので、引数の取り違えで別の受信箱に届くことがない。
+[shinzo-labs/gmail-mcp](https://github.com/shinzo-labs/gmail-mcp) のツール数は64、こちらは23。差の大半は不在応答・代理アクセス・S/MIME といった `gmail.settings.*` の領域で、gmail-mcp はこのスコープを要求しない。権限が漏れたとしても、その範囲には手が届かない。
 
-[shinzo-labs/gmail-mcp](https://github.com/shinzo-labs/gmail-mcp) のツール数は64、こちらは23。差の大半は不在応答・代理アクセス・S/MIME といった設定系 API で、gmail-mcp はこれらを OAuth スコープの外に置いている。理由は後述する。
+読み取り側にも差が出る。ローカル型のサーバーはどのパートも UTF-8 として復号するため、ISO-2022-JP や Shift_JIS のメールは文字化けし、Gmail が添付として保管する長文の本文は空で返ってくる。
 
 ---
 
@@ -128,7 +128,7 @@ bun run deploy
 
 テストが見ているのは、メール構築（MIME の入れ子、RFC 2047 の折り返し、RFC 2231 のファイル名、CR/LF の拒否、base64 の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Google のトークン処理、サインイン許可リストの判定。
 
-実際の Gmail アカウント間でも全ツールを通してある。日本語の件名は複数の encoded word に折り返されて復元され、絵文字・ZWJ・アラビア語・結合文字・アイヌ語の小書き仮名はそのまま往復した。`品詞リスト.csv` は送信・受信・再ダウンロードでバイト単位に一致し、`cid:` のインライン画像は受信側で表示された。2つのアカウントを同時に接続した状態で、一方のメッセージ ID をもう一方から読むと `404` が返る。
+実際の Gmail アカウント間でも全ツールを通してある。日本語の件名は複数の encoded word に折り返されて復元され、絵文字・ZWJ・アラビア語・結合文字・稀少漢字はそのまま往復した。`請求書.csv` は送信・受信・再ダウンロードでバイト単位に一致し、`cid:` のインライン画像は受信側で表示された。2つのアカウントを同時に接続した状態で、一方のメッセージ ID をもう一方から読むと `404` が返る。
 
 ## ライセンス
 

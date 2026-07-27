@@ -34,7 +34,7 @@ Two things push people here. The Gmail connectors built into Claude and Google r
 </div>
 
 <details>
-<summary><b>The same comparison in detail</b>, including where the alternatives are stronger</summary>
+<summary><b>A longer comparison</b> — six projects, twelve rows</summary>
 
 <br>
 
@@ -53,9 +53,9 @@ Two things push people here. The Gmail connectors built into Claude and Google r
 | Tool count | 23 | 11–16 | 14 (Gmail) | 30 | 64 | 11 |
 | Who holds your refresh token | you | vendor | you | you | you | you |
 
-**Where the others win.** [`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp) is the most complete project in this space and covers all of Workspace, with Gmail signatures and URL-sourced attachments that gmail-mcp lacks. [`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp) reaches vacation responders, delegates, and S/MIME through 64 tools; gmail-mcp keeps `gmail.settings.*` outside its OAuth scope on purpose, so those are permanently out of its reach. Both it and [`Gmail-MCP-Server`](https://github.com/ArtyMcLabin/Gmail-MCP-Server) encode non-ASCII attachment filenames the same way gmail-mcp does since v0.2.
+[`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp) is the most complete project here. It covers all of Workspace rather than Gmail alone, and it appends your Gmail signature and pulls attachments straight from a URL, neither of which gmail-mcp does. [`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp) reaches vacation responders, delegates, and S/MIME through its 64 tools; those live under `gmail.settings.*`, a scope gmail-mcp never requests, so they stay beyond its reach whatever happens to a grant.
 
-**Where the difference matters.** Multi-account routing by call argument means one grant can touch every connected mailbox; gmail-mcp binds a mailbox to the connection, so a wrong argument cannot reach the wrong inbox. On reading, both local servers assume UTF-8 regardless of the part's declared charset, so ISO-2022-JP and Shift_JIS mail arrives garbled, and neither fetches the text of long messages that Gmail stores as attachment blobs.
+Two design differences decide most of the rest. Routing accounts by a call argument lets one grant touch every connected mailbox, while binding the mailbox to the connection means a wrong argument reaches nothing. And on reading, the local servers decode every part as UTF-8: ISO-2022-JP and Shift_JIS mail arrives garbled, and long messages that Gmail stores as attachment blobs come back with an empty body.
 
 </details>
 
@@ -244,8 +244,8 @@ Beyond that, every tool has run against real Gmail accounts, with a separate acc
 
 | Area | Result |
 | :-- | :-- |
-| Encoding | Japanese subjects folded across encoded words; emoji, ZWJ sequences, RTL Arabic, combining marks, and Ainu small kana round-tripped unchanged |
-| Attachments | A CSV named `品詞リスト.csv` sent, delivered, and downloaded back byte-identical; an inline `cid:` image rendered by the recipient |
+| Encoding | Japanese subjects folded across encoded words; emoji, ZWJ sequences, RTL Arabic, combining marks, and rare CJK round-tripped unchanged |
+| Attachments | A CSV named `請求書.csv` sent, delivered, and downloaded back byte-identical; an inline `cid:` image rendered by the recipient |
 | Threading | `reply_all` addressed the sender, kept the third-party `Cc`, dropped its own address, and quoted the original in the same thread |
 | Two accounts | Both connected to one deployment at once; a message id from one returned `404` on the other |
 | Organizing | A nested CJK label created, renamed, applied by batch, and deleted; thread and message trash both reversed |

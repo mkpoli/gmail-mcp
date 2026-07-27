@@ -25,7 +25,7 @@ describe("b64url", () => {
 	});
 
 	test("round-trips UTF-8", () => {
-		const s = "件名テスト aynu itak 🐟";
+		const s = "件名テスト sample text 🐟";
 		expect(b64urlDecode(b64urlEncode(s))).toBe(s);
 	});
 
@@ -107,7 +107,7 @@ describe("buildRfc822", () => {
 	});
 
 	test("handles bodies past the fromCharCode argument limit", () => {
-		const body = "アイヌ語 corpus line\n".repeat(20_000);
+		const body = "長い本文の一行\n".repeat(20_000);
 		const raw = buildRfc822({ to: "a@example.com", subject: "big", body });
 		const encoded = raw.split("\r\n\r\n")[1].replace(/\r\n/g, "");
 		expect(b64urlDecode(encoded.replace(/\+/g, "-").replace(/\//g, "_"))).toBe(body);
@@ -237,10 +237,10 @@ describe("buildRfc822", () => {
 			to: "a@example.com",
 			subject: "s",
 			body: "b",
-			attachments: [{ filename: "品詞リスト.csv", contentType: "text/csv", content: btoa("a,b") }],
+			attachments: [{ filename: "請求書.csv", contentType: "text/csv", content: btoa("a,b") }],
 		});
 		// Percent-encoded UTF-8 in the disposition, RFC 2047 word in the legacy name.
-		expect(raw).toContain("filename*=UTF-8''%E5%93%81%E8%A9%9E");
+		expect(raw).toContain("filename*=UTF-8''%E8%AB%8B%E6%B1%82%E6%9B%B8");
 		expect(raw).toMatch(/Content-Type: text\/csv; name="=\?UTF-8\?B\?/);
 	});
 
