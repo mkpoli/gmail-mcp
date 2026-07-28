@@ -74,6 +74,8 @@ export type GoogleTokens = {
 	access_token: string;
 	refresh_token?: string;
 	expires_in: number;
+	// What the account actually granted, which is not always what was asked for.
+	scope?: string;
 };
 
 export async function exchangeGoogleCode({

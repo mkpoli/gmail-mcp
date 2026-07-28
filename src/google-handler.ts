@@ -25,11 +25,17 @@ import {
 
 // gmail.modify covers read, search, labels, trash, drafts, and send,
 // while excluding permanent deletion and account settings.
+const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
 const GOOGLE_SCOPE = [
-	"https://www.googleapis.com/auth/gmail.modify",
+	GMAIL_SCOPE,
 	"https://www.googleapis.com/auth/userinfo.email",
 	"https://www.googleapis.com/auth/userinfo.profile",
 ].join(" ");
+
+// An approval post carries a base64 state blob and a token, measured in
+// kilobytes. The ceiling is what separates that from a body sent to occupy the
+// isolate's memory.
+const MAX_APPROVAL_BODY_BYTES = 64 * 1024;
 
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
 
@@ -103,6 +109,14 @@ app.get("/authorize", async (c) => {
 
 app.post("/authorize", async (c) => {
 	try {
+		// Anyone can post here, and the CSRF token being checked below travels in
+		// the body, so the body has to be read before it can be trusted. A real
+		// approval carries a state blob and a token; anything far larger is
+		// refused rather than buffered into the isolate.
+		const declared = Number.parseInt(c.req.header("content-length") ?? "", 10);
+		if (Number.isFinite(declared) && declared > MAX_APPROVAL_BODY_BYTES) {
+			return c.text("Request body too large", 413);
+		}
 		const formData = await c.req.raw.formData();
 		const csrfClearCookie = validateCSRFToken(formData, c.req.raw);
 
@@ -188,6 +202,16 @@ app.get("/callback", async (c) => {
 		redirect_uri: new URL("/callback", c.req.url).href,
 	});
 	if (errResponse) return errResponse;
+	// The consent screen lets an account tick the Gmail permission off and
+	// approve the rest. That grant looks complete here and fails on the first
+	// tool call instead, so it is refused now while the reason is still legible.
+	const granted = (tokens.scope ?? "").split(/\s+/).filter(Boolean);
+	if (granted.length > 0 && !granted.includes(GMAIL_SCOPE)) {
+		return c.text(
+			"Gmail access was not granted. Sign in again and leave the Gmail permission ticked.",
+			403,
+		);
+	}
 	if (!tokens.refresh_token) {
 		return c.text(
 			"Google did not return a refresh token. Remove this app's access at https://myaccount.google.com/connections and try again.",
