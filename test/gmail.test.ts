@@ -493,6 +493,41 @@ describe("a header value whose quotes do not balance", () => {
 	});
 });
 
+describe("a long recipient list written without spaces", () => {
+	// The list is rejoined with ", " before it is written, so it folds at every
+	// address. Measuring what the caller typed refused a bare-comma list for
+	// having no space in it, while the header built from it had one throughout.
+	const list = (n: number, separator: string) =>
+		Array.from({ length: n }, (_, i) => `r${i}@example.com`).join(separator);
+
+	test("sends whether or not the commas are followed by a space", () => {
+		for (const separator of [",", ", "]) {
+			const raw = buildRfc822({ to: list(70, separator), subject: "s", body: "b" });
+			const longest = Math.max(...raw.split("\r\n").map((line) => line.length));
+			expect(longest).toBeLessThanOrEqual(998);
+		}
+	});
+
+	test("applies to Cc and Bcc too", () => {
+		const raw = buildRfc822({
+			to: "a@example.com",
+			cc: list(70, ","),
+			bcc: list(70, ","),
+			subject: "s",
+			body: "b",
+		});
+		expect(raw).toContain("Cc: ");
+		expect(raw).toContain("Bcc: ");
+	});
+
+	// One address with nowhere to fold still cannot be sent.
+	test("still refuses a single address too wide for a line", () => {
+		expect(() =>
+			buildRfc822({ to: `${"x".repeat(963)}@example.com`, subject: "s", body: "b" }),
+		).toThrow(/too long to fit a header line/);
+	});
+});
+
 describe("a message addressed only by Bcc", () => {
 	// The builder admits mail that names no To, and an announcement sent
 	// privately to a list is ordinary mail. What went out was an empty field,

@@ -503,7 +503,11 @@ export function buildRfc822({
 		["Bcc", bcc ?? ""],
 		["From", from ?? ""],
 	] as const) {
-		if (value) assertLiteralFits(name, value);
+		// What has to fit is the list as it will be written, which is rejoined
+		// with ", " and so folds at every address. Measuring what the caller
+		// typed refuses a list separated by bare commas for having no space in
+		// it, while the header built from it would have had one throughout.
+		if (value) assertLiteralFits(name, encodeAddressList(value));
 	}
 	if (!to.trim() && !cc?.trim() && !bcc?.trim()) {
 		// A message may name no To at all as long as it reaches someone: a
