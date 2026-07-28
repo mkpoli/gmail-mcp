@@ -9,6 +9,22 @@ export type Props = {
 	expiresAt: number;
 };
 
+// The transport hands the authenticated grant to the Durable Object in a header
+// it sets itself on every request, base64 for ASCII safety, with raw JSON
+// accepted from older callers. A value arriving from a client is overwritten
+// before it gets here, so this is the account the OAuth layer authenticated.
+export function decodeRequestProps(encoded: string): Props | null {
+	try {
+		const json = encoded.startsWith("{")
+			? encoded
+			: new TextDecoder().decode(Uint8Array.from(atob(encoded), (ch) => ch.charCodeAt(0)));
+		const parsed = JSON.parse(json);
+		return typeof parsed?.email === "string" ? (parsed as Props) : null;
+	} catch {
+		return null;
+	}
+}
+
 // The MCP endpoint is public and clients self-register, so who may finish a
 // Google sign-in is decided by ALLOWED_EMAILS. Patterns, comma-separated:
 //   user@example.com  a single account

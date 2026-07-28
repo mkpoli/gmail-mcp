@@ -25,7 +25,7 @@ import {
 	truncate,
 } from "./gmail";
 import { GoogleHandler } from "./google-handler";
-import { type Props, refreshGoogleToken } from "./utils";
+import { decodeRequestProps, type Props, refreshGoogleToken } from "./utils";
 
 type TokenCache = { accessToken: string; expiresAt: number };
 
@@ -59,19 +59,37 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		version: "0.1.0",
 	});
 
+	// Which account is calling, taken from the props that arrive with each
+	// request. The object is addressed by session id alone and stays warm
+	// between requests, while `this.props` is assigned only when it starts, so
+	// on a warm session that field still names whoever opened it. Reading it
+	// would answer a second account with the first one's identity and Google
+	// token, and would compare that same stale identity against the recorded
+	// owner — a check that can only ever agree with itself.
+	private requestProps: Props | null = null;
+
+	override async fetch(request: Request): Promise<Response> {
+		const encoded = request.headers.get("x-partykit-props");
+		if (encoded) this.requestProps = decodeRequestProps(encoded);
+		return super.fetch(request);
+	}
+
 	// Access tokens live one hour; the refresh token from props mints new ones.
 	// The freshest token is kept in DO storage because props are immutable
 	// for the lifetime of the MCP grant.
 	private get grantProps(): Props {
-		if (!this.props) throw new Error("missing auth props on MCP session");
-		return this.props;
+		const props = this.requestProps ?? this.props;
+		if (!props) throw new Error("missing auth props on MCP session");
+		return props;
 	}
 
 	// The MCP transport addresses this Durable Object by the Mcp-Session-Id
 	// header alone, so the session id — not the OAuth grant — would otherwise
 	// decide whose mailbox a request reaches. The first grant to touch a session
 	// claims it; every later request must present the same account, or the
-	// cached Google token of the first account would serve the second.
+	// cached Google token of the first account would serve the second. The
+	// comparison is only worth anything because the caller comes from the
+	// request rather than from the object's start-up state.
 	private async assertSessionOwner(): Promise<void> {
 		const caller = this.grantProps.email.toLowerCase();
 		const owner = await this.ctx.storage.get<string>("owner");
