@@ -883,16 +883,29 @@ describe("outgoing size ceiling", () => {
 describe("recipient and body selection, alias-aware", () => {
 	// The overlap between To and Cc has to be judged the same way self is, or an
 	// alias of a To recipient still lands in Cc.
-	test("does not copy an alias of someone already addressed", () => {
+	test("does not copy the same address written differently", () => {
 		const { to, cc } = replyRecipients({
 			self: "me@example.com",
-			from: ["User+tag1@example.com"],
-			to: ["user@example.com", "bob@example.com"],
-			cc: ["USER@example.com"],
+			from: ["alice@example.com"],
+			to: ["USER@example.com", "bob@example.com"],
+			cc: ["user@example.com"],
 			replyTo: [],
 		});
-		expect(to).toEqual(["User+tag1@example.com"]);
-		expect(cc).toEqual(["bob@example.com"]);
+		expect(to).toEqual(["alice@example.com"]);
+		expect(cc).toEqual(["USER@example.com", "bob@example.com"]);
+	});
+
+	// A tag is how its owner routes mail; two tagged addresses are different
+	// recipients even though they reach one mailbox.
+	test("keeps a tagged recipient that is not this account", () => {
+		const { cc } = replyRecipients({
+			self: "me@example.com",
+			from: ["alice@example.com"],
+			to: ["bob@example.com"],
+			cc: ["bob+invoices@example.com"],
+			replyTo: [],
+		});
+		expect(cc).toContain("bob+invoices@example.com");
 	});
 
 	// The externalized-body fallback has to judge attachments the same way the
@@ -1075,5 +1088,42 @@ describe("gmailFetch empty responses", () => {
 	])("returns nothing for %s", async (_name, response) => {
 		globalThis.fetch = (async () => response) as unknown as typeof fetch;
 		expect(await gmailFetch("tok", "/threads/x/trash", { method: "POST" })).toBeNull();
+	});
+});
+
+describe("outgoing message ceilings", () => {
+	test("refuses a body past the character ceiling", () => {
+		expect(() =>
+			buildRfc822({ to: "a@example.com", subject: "s", body: "x".repeat(1_000_001) }),
+		).toThrow(/may not exceed/);
+	});
+
+	test("refuses a message with no recipient", () => {
+		expect(() => buildRfc822({ to: "   ", subject: "s", body: "b" })).toThrow(/recipient/);
+	});
+
+	// A part's own headers are assembled apart from the message headers, so an
+	// over-long filename would never be folded.
+	test("refuses an attachment name too long for a header line", () => {
+		expect(() =>
+			buildRfc822({
+				to: "a@example.com",
+				subject: "s",
+				body: "b",
+				attachments: [
+					{
+						filename: `${"a".repeat(1200)}.pdf`,
+						contentType: "application/pdf",
+						content: btoa("x"),
+					},
+				],
+			}),
+		).toThrow(/too long/);
+	});
+
+	test("refuses an address header that cannot be folded", () => {
+		expect(() =>
+			buildRfc822({ to: `"${"a".repeat(1200)}" <a@example.com>`, subject: "s", body: "b" }),
+		).toThrow(/too long/);
 	});
 });

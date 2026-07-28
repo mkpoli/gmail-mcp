@@ -3,10 +3,12 @@
 
 const BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 
-// Gmail refuses a message over 25 MB, and base64 costs a third on top of the
-// bytes it carries. The ceiling is on the encoded length because that is what
-// arrives and what gets copied during assembly.
-const MAX_ENCODED_ATTACHMENT_BYTES = 34_000_000;
+// Assembling a message copies it several times over — normalised, wrapped,
+// joined, encoded — so what may arrive is bounded well below both Gmail's own
+// 25 MB limit and the isolate's memory, rather than just under them.
+const MAX_ENCODED_ATTACHMENT_BYTES = 8_000_000;
+// The written parts of a message are bounded too; nothing else caps them.
+const MAX_BODY_CHARS = 1_000_000;
 
 // RFC 5322 §2.1.1 caps a line at 998 octets. Folding breaks at spaces, so a
 // stretch without one has to fit a line on its own, allowing for the field name.
@@ -347,10 +349,20 @@ function filenameParams(filename: string): { name: string; disposition: string }
 	};
 }
 
+// A part's own headers are assembled separately from the message headers, so
+// they never reach foldHeader; an over-long filename would sit on one line past
+// the limit. Refusing is right here because the name has to travel literally.
+function assertPartHeaderFits(name: string, value: string): string {
+	if (value.length > MAX_HEADER_RUN) {
+		throw new Error(`${name} is too long to fit a header line`);
+	}
+	return value;
+}
+
 function filePart(p: FilePart): string[] {
 	assertHeaderSafe("attachment filename", p.filename);
 	const contentType = assertMediaType(p.contentType);
-	const params = filenameParams(p.filename);
+	const params = filenameParams(assertPartHeaderFits("attachment filename", p.filename));
 	return [
 		`Content-Type: ${contentType}; ${params.name}`,
 		"Content-Transfer-Encoding: base64",
@@ -426,6 +438,14 @@ export function buildRfc822({
 	assertHeaderSafe("Subject", subject);
 	if (inReplyTo) assertLiteralFits("In-Reply-To", assertHeaderSafe("In-Reply-To", inReplyTo));
 	if (references) assertLiteralFits("References", assertHeaderSafe("References", references));
+	for (const [name, value] of [
+		["To", to],
+		["Cc", cc ?? ""],
+		["Bcc", bcc ?? ""],
+		["From", from ?? ""],
+	] as const) {
+		if (value) assertLiteralFits(name, value);
+	}
 	if (!to.trim()) {
 		throw new Error("a message needs at least one recipient");
 	}
@@ -435,6 +455,9 @@ export function buildRfc822({
 	// Assembly copies the payload several times over — normalized, wrapped,
 	// joined, encoded — so a message far past what Gmail would accept anyway
 	// is refused before any of those copies exist.
+	if (body.length > MAX_BODY_CHARS || (htmlBody?.length ?? 0) > MAX_BODY_CHARS) {
+		throw new Error(`a message body may not exceed ${MAX_BODY_CHARS} characters`);
+	}
 	const encodedBytes = [...attachments, ...inlineImages].reduce(
 		(total, part) => total + part.content.length,
 		0,
@@ -514,6 +537,8 @@ export function canonicalAddress(address: string): string {
 	const tag = local.indexOf("+");
 	if (tag >= 0) local = local.slice(0, tag);
 	if (domain === "googlemail.com") domain = "gmail.com";
+	// Dots fold only on Gmail's own domains; elsewhere they are part of the
+	// address. A tag folds anywhere, because it delivers to the same mailbox.
 	if (domain === "gmail.com") local = local.replaceAll(".", "");
 	return `${local}@${domain}`;
 }
@@ -534,12 +559,17 @@ export function replyRecipients(fields: {
 	const notSelf = (a: string) => canonicalAddress(a) !== self;
 	const primary = (fields.replyTo.length > 0 ? fields.replyTo : fields.from).filter(notSelf);
 	const to = primary.length > 0 ? primary : fields.to.filter(notSelf);
-	// The same address can reach To and Cc in different spellings, so the overlap
-	// is judged the way self is rather than by string equality.
-	const addressed = new Set(to.map(canonicalAddress));
-	const cc = [...fields.to, ...fields.cc].filter(
-		(a) => notSelf(a) && !addressed.has(canonicalAddress(a)),
-	);
+	// Whether an address is this account is judged by where mail lands, but the
+	// overlap between To and Cc is judged as written: a tag is how its owner
+	// sorts their own mail, and folding it away would drop them from the reply.
+	const addressed = new Set(to.map((a) => a.trim().toLowerCase()));
+	const cc: string[] = [];
+	for (const address of [...fields.to, ...fields.cc]) {
+		const key = address.trim().toLowerCase();
+		if (!notSelf(address) || addressed.has(key)) continue;
+		addressed.add(key);
+		cc.push(address);
+	}
 	return { to, cc };
 }
 

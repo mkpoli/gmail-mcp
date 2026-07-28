@@ -499,10 +499,17 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		this.server.tool(
 			"list_drafts",
 			`List drafts in ${account}`,
-			{ maxResults: z.number().int().min(1).max(50).default(10) },
-			async ({ maxResults }) => {
-				const l = await this.api(`/drafts?maxResults=${maxResults}`);
-				const drafts = (l as DraftList).drafts ?? [];
+			{
+				maxResults: z.number().int().min(1).max(50).default(10),
+				pageToken: z.string().optional().describe("nextPageToken from a previous listing"),
+			},
+			async ({ maxResults, pageToken }) => {
+				// Without a page token the drafts past the first page cannot be
+				// reached at all: the listing is the only place their ids appear.
+				const draftParams = new URLSearchParams({ maxResults: String(maxResults) });
+				if (pageToken) draftParams.set("pageToken", pageToken);
+				const l = await this.api<DraftList & { nextPageToken?: string }>(`/drafts?${draftParams}`);
+				const drafts = l.drafts ?? [];
 				// The list response carries ids only, which say nothing about which
 				// draft is which; pull the headers that identify them.
 				const detailed = await this.mapLimited(drafts, 8, async (d) => {
@@ -518,7 +525,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 						snippet: full.message?.snippet,
 					};
 				});
-				return this.text(detailed);
+				return this.text({ nextPageToken: l.nextPageToken, drafts: detailed });
 			},
 		);
 
@@ -548,6 +555,14 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				threadId,
 				inReplyTo,
 			}) => {
+				// Gmail places a message in a thread only when the threading headers
+				// agree with the thread id; one without the other produces a message
+				// that either is refused or starts its own conversation.
+				if (threadId && !inReplyTo) {
+					throw new Error(
+						"replying into a thread needs inReplyTo as well as threadId; pass the original's Message-ID",
+					);
+				}
 				const threadHeader = inReplyTo ? await this.threadHeaderFor(inReplyTo) : undefined;
 				const raw = b64urlEncode(
 					buildRfc822({
@@ -761,14 +776,17 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				// message carrying a single attachment leaves nothing to choose
 				// between; the id is still tried first for the messages where it
 				// does stay put.
+				// The id is tried first: when it still matches there is nothing to be
+				// ambiguous about, whatever names the other parts carry.
+				const byId = parts.find((a) => a.attachmentId === attachmentId);
 				const named = filename ? parts.filter((a) => a.filename === filename) : [];
-				if (named.length > 1) {
+				if (!byId && named.length > 1) {
 					throw new Error(
 						`this message carries ${named.length} attachments named ${filename}; they cannot be told apart once Gmail has reissued their ids`,
 					);
 				}
 				const part =
-					parts.find((a) => a.attachmentId === attachmentId) ??
+					byId ??
 					named[0] ??
 					// Naming a file that is not here is a mistake worth reporting; with
 					// no name given and one attachment there is nothing to mistake.
@@ -979,11 +997,10 @@ const mcpHandler = {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const email = (ctx.props as Props | undefined)?.email?.toLowerCase();
 		// The transport copies the request's headers on to the session object, so
-		// a client-supplied one would arrive there looking authenticated. Both are
-		// cleared first and the account is stamped from the grant the OAuth layer
+		// a client-supplied one would arrive there looking authenticated. It is
+		// cleared first and the account stamped from the grant the OAuth layer
 		// decrypted, which no client can choose.
 		const forwarded = new Request(request);
-		forwarded.headers.delete("x-partykit-props");
 		forwarded.headers.delete(ACCOUNT_HEADER);
 		if (email) forwarded.headers.set(ACCOUNT_HEADER, email);
 		return mcpAgent.fetch(forwarded, env, ctx);

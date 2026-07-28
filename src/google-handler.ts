@@ -39,6 +39,8 @@ const MAX_APPROVAL_BODY_BYTES = 64 * 1024;
 
 // Reads a form body while counting what arrives, so a sender that declares no
 // length cannot decide how much memory it occupies.
+class BodyTooLarge extends Error {}
+
 async function readBoundedForm(request: Request, limit: number): Promise<FormData> {
 	const reader = request.body?.getReader();
 	if (!reader) return new FormData();
@@ -50,7 +52,7 @@ async function readBoundedForm(request: Request, limit: number): Promise<FormDat
 		total += value.byteLength;
 		if (total > limit) {
 			await reader.cancel();
-			throw new Error("body too large");
+			throw new BodyTooLarge();
 		}
 		chunks.push(value);
 	}
@@ -142,8 +144,13 @@ app.post("/authorize", async (c) => {
 		let formData: FormData;
 		try {
 			formData = await readBoundedForm(c.req.raw, MAX_APPROVAL_BODY_BYTES);
-		} catch {
-			return c.text("Request body too large", 413);
+		} catch (error: unknown) {
+			// Reading and parsing happen together, and the two failures deserve
+			// different answers: one says the body was too big, the other that it
+			// was not a form at all.
+			return error instanceof BodyTooLarge
+				? c.text("Request body too large", 413)
+				: c.text("Invalid form data", 400);
 		}
 		const csrfClearCookie = validateCSRFToken(formData, c.req.raw);
 

@@ -75,11 +75,29 @@ describe("exchangeGoogleCode", () => {
 		expect(params.get("code")).toBe("the-code");
 	});
 
-	test("maps upstream failure to a 500 response", async () => {
-		mockFetch(() => new Response("boom", { status: 400 }));
-		const [tokens, err] = await exchangeGoogleCode({ ...args, code: "c" });
+	test("tells the caller to start again when Google refuses the code", async () => {
+		globalThis.fetch = (async () =>
+			new Response("invalid_grant", { status: 400 })) as unknown as typeof fetch;
+		const [tokens, err] = await exchangeGoogleCode({
+			client_id: "c",
+			client_secret: "s",
+			code: "spent",
+			redirect_uri: "https://x.test/callback",
+		});
 		expect(tokens).toBeNull();
-		expect(err?.status).toBe(500);
+		expect(err?.status).toBe(400);
+	});
+
+	test("reports an upstream fault as a bad gateway", async () => {
+		globalThis.fetch = (async () =>
+			new Response("boom", { status: 503 })) as unknown as typeof fetch;
+		const [, err] = await exchangeGoogleCode({
+			client_id: "c",
+			client_secret: "s",
+			code: "x",
+			redirect_uri: "https://x.test/callback",
+		});
+		expect(err?.status).toBe(502);
 	});
 
 	test("rejects a response without access_token", async () => {

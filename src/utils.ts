@@ -104,8 +104,17 @@ export async function exchangeGoogleCode({
 		}).toString(),
 	});
 	if (!resp.ok) {
-		console.error("google token exchange failed:", resp.status, await resp.text());
-		return [null, new Response("Failed to exchange authorization code", { status: 500 })];
+		const detail = await resp.text();
+		console.error("google token exchange failed:", resp.status, detail);
+		// Google refuses a spent, mismatched or expired code with a 4xx. Passing
+		// that back as a server fault tells the person signing in to wait for a
+		// fix that is not coming; what they need to do is start again.
+		return [
+			null,
+			resp.status >= 400 && resp.status < 500
+				? new Response("Google refused this sign-in. Start the connection again.", { status: 400 })
+				: new Response("Failed to exchange authorization code", { status: 502 }),
+		];
 	}
 	const tokens = (await resp.json()) as GoogleTokens;
 	if (!tokens.access_token) {
