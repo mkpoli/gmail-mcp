@@ -600,6 +600,30 @@ describe("attachments that arrive whole", () => {
 	});
 });
 
+describe("an attachment with no bytes in it", () => {
+	// A sender may attach an empty file, and Gmail returns it named with a body
+	// of zero length. It is still a file the recipient was sent.
+	test("names it alongside the others", async () => {
+		const { handlers } = await boot();
+		const withEmpty = message("m1", {
+			payload: {
+				mimeType: "multipart/mixed",
+				parts: [
+					{ mimeType: "text/plain", body: { data: b64url("body") } },
+					{ mimeType: "text/plain", filename: "empty.txt", body: { size: 0, data: "" } },
+					{ mimeType: "text/csv", filename: "real.csv", body: { size: 3, data: b64url("a,b") } },
+				],
+			},
+		});
+		serveGmail([[/\/messages\/m1\?format=full/, () => withEmpty]]);
+		const out = result(await tool(handlers, "get_message")({ messageId: "m1" }));
+		expect((out.attachments as { filename: string }[]).map((a) => a.filename)).toEqual([
+			"empty.txt",
+			"real.csv",
+		]);
+	});
+});
+
 describe("a message that arrived as a file", () => {
 	// Abuse reports and bounce chains arrive this way: the mail carries another
 	// message as an attachment, and that message carries files of its own.

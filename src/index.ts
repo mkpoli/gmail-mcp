@@ -1118,7 +1118,10 @@ function collectAttachments(payload: GmailPart | undefined) {
 	}[] = [];
 	const walk = (p: GmailPart | undefined, enclosed: boolean) => {
 		if (!p) return;
-		if (p.filename && (p.body?.attachmentId || p.body?.data)) {
+		// A named part is an attachment whether or not it has bytes: an empty
+		// file is one a sender attached, and judging by whether the data is
+		// truthy drops it from the listing and out of a forward.
+		if (p.filename && (p.body?.attachmentId !== undefined || p.body?.data !== undefined)) {
 			out.push({
 				enclosed,
 				filename: p.filename,
