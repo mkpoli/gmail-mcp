@@ -665,21 +665,40 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			`Download an attachment from a message in ${account} (base64, capped at ~1.5 MB; text types also decoded)`,
 			{
 				messageId: z.string(),
-				attachmentId: z.string(),
+				attachmentId: z
+					.string()
+					.describe("From the message listing; Gmail reissues it on every read"),
+				filename: z
+					.string()
+					.optional()
+					.describe("Names the attachment when a message carries more than one"),
 				textOnly: z
 					.boolean()
 					.default(false)
 					.describe("Return only decoded text for text/* attachments, no base64"),
 			},
-			async ({ messageId, attachmentId, textOnly }) => {
+			async ({ messageId, attachmentId, filename, textOnly }) => {
 				// The part's declared type decides whether decoding to text is
 				// meaningful; decoding a PDF as UTF-8 would return pages of noise.
 				const message = await this.api(`/messages/${encodeURIComponent(messageId)}?format=full`);
-				const part = collectAttachments(message.payload).find(
-					(a) => a.attachmentId === attachmentId,
-				);
+				const parts = collectAttachments(message.payload);
+				// Gmail hands out a different attachment id every time a message is
+				// read, so the one a caller is holding came from an earlier read and
+				// will not appear here. The filename survives between reads, and a
+				// message carrying a single attachment leaves nothing to choose
+				// between; the id is still tried first for the messages where it
+				// does stay put.
+				const part =
+					parts.find((a) => a.attachmentId === attachmentId) ??
+					(filename ? parts.find((a) => a.filename === filename) : undefined) ??
+					(parts.length === 1 ? parts[0] : undefined);
 				if (!part) {
-					throw new Error("no attachment with that id on this message");
+					const names = parts.map((a) => a.filename).join(", ");
+					throw new Error(
+						names
+							? `this message carries several attachments; name one of them with filename: ${names}`
+							: "this message carries no attachments",
+					);
 				}
 				if (part.size > ATTACHMENT_BYTE_LIMIT) {
 					return this.text({
@@ -691,7 +710,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				}
 
 				const att = await this.api(
-					`/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
+					`/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.attachmentId)}`,
 				);
 				const data: string = att?.data ?? "";
 				const meta = { filename: part.filename, mimeType: part.mimeType, size: part.size };
