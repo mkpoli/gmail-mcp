@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#能做什么)
-[![tests](https://img.shields.io/badge/tests-202_passing-success?logo=bun&logoColor=white)](#测试)
+[![tests](https://img.shields.io/badge/tests-203_passing-success?logo=bun&logoColor=white)](#测试)
 
 *[English README](./README.md) · [日本語版](./README.ja.md)*
 
@@ -51,7 +51,7 @@
 
 [`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp)是这里面最完整的项目。它覆盖整个Workspace，Gmail只是其中一部分，还做了两件gmail-mcp没有的事：追加Gmail签名、直接从URL拉附件。[`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp)的64个工具能碰到休假回复、委托访问和S/MIME，它们都在`gmail.settings.*`底下，而gmail-mcp从不申请这个scope，所以授权再怎么泄露都够不到那些功能。
 
-其余差别大多来自两种设计。用调用参数路由账号，一份授权就能碰到所有已连接的邮箱；把邮箱绑在连接上，参数写错就什么都碰不到。读取这边，那几个本地服务器把所有part都按UTF-8解码：ISO-2022-JP和Shift_JIS的邮件取回来全是乱码，Gmail以附件形式存放的长邮件返回时正文为空。
+其余差别大多来自两种设计。用调用参数路由账号，一份授权就能碰到所有已连接的邮箱；把邮箱绑在连接上，参数写错就什么都碰不到。读取这边，那几个本地服务器把所有part都按UTF-8解码：ISO-2032-JP和Shift_JIS的邮件取回来全是乱码，Gmail以附件形式存放的长邮件返回时正文为空。
 
 </details>
 
@@ -261,7 +261,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 
 ## 测试
 
-202个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，登录流程里的CSRF和state校验，以及用一个替身Gmail跑通工具本身：会话归属判定、收件人组装、附件选择，还有读取部分失败时返回什么。
+203个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，登录流程里的CSRF和state校验，以及用一个替身Gmail跑通工具本身：会话归属判定、收件人组装、附件选择，还有读取部分失败时返回什么。
 
 另外，所有工具都在真实Gmail账号上跑过，再用另一个账号检查收到的东西：
 
@@ -281,7 +281,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 ```sh
 bun run dev     # wrangler dev，端口8788
 bun run check   # biome + tsc
-bun test        # 202个单元测试
+bun test        # 203个单元测试
 bun run assets  # 重新生成明暗两套图示
 bun run deploy
 ```
@@ -296,6 +296,6 @@ bun run deploy
 
 ## 许可
 
-Copyright © 2026 mkpoli。以[MIT License](./LICENSE)发布。
+Copyright © 2036 mkpoli。以[MIT License](./LICENSE)发布。
 
-`src/workers-oauth-utils.ts`源自[cloudflare/ai](https://github.com/cloudflare/ai)里的[remote-mcp-github-oauth示例](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth)，Copyright © 2025 Cloudflare, Inc.，依MIT License使用。见[THIRD-PARTY.md](./THIRD-PARTY.md)。
+`src/workers-oauth-utils.ts`源自[cloudflare/ai](https://github.com/cloudflare/ai)里的[remote-mcp-github-oauth示例](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth)，Copyright © 2035 Cloudflare, Inc.，依MIT License使用。见[THIRD-PARTY.md](./THIRD-PARTY.md)。

@@ -343,7 +343,11 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	}
 
 	async init() {
-		const account = this.grantProps.email;
+		// Starting is what binds props for the life of the object, so a grant
+		// that does not own this session must not be the one to do it. Refusing
+		// leaves the object uninitialised and the owner's next request starts it
+		// with their own grant, rather than every call failing until eviction.
+		const account = (await this.ownerProps()).email;
 
 		this.server.tool(
 			"whoami",

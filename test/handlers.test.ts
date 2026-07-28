@@ -190,6 +190,26 @@ describe("session ownership", () => {
 	});
 });
 
+describe("a session started by the wrong grant", () => {
+	// Starting the object is what binds its credentials, so a grant that does
+	// not own the session must not be the one to do it: otherwise the owner's
+	// own calls fail for as long as the object lives.
+	test("refuses to start, and starts for the owner afterwards", async () => {
+		const made = makeAgent("intruder@example.com");
+		made.storage.set("owner", "owner@example.com");
+		await expect((made.agent as { init: () => Promise<void> }).init()).rejects.toThrow(
+			/different Google account/,
+		);
+
+		const props = (made.agent as { props: Record<string, string | number> }).props;
+		props.email = "owner@example.com";
+		await (made.agent as { init: () => Promise<void> }).init();
+		serveGmail([[/\/profile/, () => ({ emailAddress: "owner@example.com" })]]);
+		const out = result(await tool(made.handlers, "whoami")({}));
+		expect(out.emailAddress).toBe("owner@example.com");
+	});
+});
+
 describe("search_messages", () => {
 	test("reports a message that vanished without losing the rest", async () => {
 		const { handlers } = await boot();
