@@ -1040,3 +1040,22 @@ describe("body selection inside an attached message", () => {
 		).toBeNull();
 	});
 });
+
+describe("normalizeMessageId strictness", () => {
+	// In-Reply-To takes exactly one msg-id (RFC 5322 §3.6.4). Anything else
+	// stops the reply threading, silently.
+	test.each([
+		["two ids", "<a@b> <c@d>"],
+		["id plus junk", "<a@b> junk"],
+		["empty local part", "<@example.com>"],
+		["empty domain", "<user@>"],
+		["no id at all", "<>"],
+	])("rejects %s", (_name, value) => {
+		expect(normalizeMessageId(value)).toBeNull();
+	});
+
+	test("still accepts a single well-formed id, bracketed or not", () => {
+		expect(normalizeMessageId("<CAB1+2/x@mail.gmail.com>")).toBe("<CAB1+2/x@mail.gmail.com>");
+		expect(normalizeMessageId("CAB1@mail.gmail.com")).toBe("<CAB1@mail.gmail.com>");
+	});
+});

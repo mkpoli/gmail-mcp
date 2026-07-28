@@ -738,7 +738,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const part =
 					parts.find((a) => a.attachmentId === attachmentId) ??
 					named[0] ??
-					(parts.length === 1 ? parts[0] : undefined);
+					// Naming a file that is not here is a mistake worth reporting; with
+					// no name given and one attachment there is nothing to mistake.
+					(filename === undefined && parts.length === 1 ? parts[0] : undefined);
 				if (!part) {
 					const names = parts.map((a) => a.filename).join(", ");
 					throw new Error(

@@ -12,9 +12,10 @@ const MAX_ENCODED_ATTACHMENT_BYTES = 34_000_000;
 // stretch without one has to fit a line on its own, allowing for the field name.
 const MAX_HEADER_RUN = 900;
 
-// A ceiling on any single Gmail response. Well above an ordinary thread, well
-// under what would exhaust a Worker isolate.
-const MAX_RESPONSE_BYTES = 24_000_000;
+// A ceiling on any single Gmail response. Reading one costs several copies at
+// once — the chunks, the joined bytes, the decoded string, the parsed object —
+// so the ceiling sits well below the isolate's own limit rather than near it.
+const MAX_RESPONSE_BYTES = 6_000_000;
 
 // The parts of Gmail's message shape this server reads. Everything is optional
 // because the API omits fields by format and by message: a metadata read has no
@@ -624,7 +625,10 @@ export function quoteHtml(from: string, date: string, plainBody: string): string
 export function normalizeMessageId(value: string): string | null {
 	const trimmed = value.trim();
 	if (!trimmed.includes("@")) return null;
-	return /^<[\s\S]*>$/.test(trimmed) ? trimmed : `<${trimmed}>`;
+	const bare = trimmed.startsWith("<") && trimmed.endsWith(">") ? trimmed.slice(1, -1) : trimmed;
+	// One id, with something either side of the @ and no space anywhere in it.
+	if (!/^[^\s<>@]+@[^\s<>@]+$/.test(bare)) return null;
+	return `<${bare}>`;
 }
 
 export function headerValue(message: GmailMessage | undefined, name: string): string | undefined {
