@@ -528,7 +528,12 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					throw new Error("reply_all found no recipient other than this account");
 				}
 
-				const messageIdHeader = headerValue(original, "Message-ID");
+				// A sender that omitted the angle brackets would otherwise have its
+				// malformed id copied into the reply, where no receiver can thread
+				// on it. Nothing usable means no threading header at all; the
+				// thread id still carries the reply into the conversation.
+				const original_id = headerValue(original, "Message-ID");
+				const messageIdHeader = original_id ? normalizeMessageId(original_id) : null;
 				const references = [headerValue(original, "References"), messageIdHeader]
 					.filter(Boolean)
 					.join(" ");
@@ -548,7 +553,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 							: undefined,
 						attachments,
 						inlineImages,
-						inReplyTo: messageIdHeader,
+						inReplyTo: messageIdHeader ?? undefined,
 						references: references || undefined,
 					}),
 				);
