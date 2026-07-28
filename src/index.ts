@@ -4,6 +4,7 @@ import { McpAgent } from "agents/mcp";
 import { z } from "zod";
 import {
 	b64urlEncode,
+	b64urlToStandard,
 	buildRfc822,
 	decodeAttachmentText,
 	extractBody,
@@ -597,7 +598,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 								filename: a.filename,
 								contentType: a.mimeType,
 								// Gmail hands back base64url; the builder wants standard base64.
-								content: (blob?.data ?? "").replace(/-/g, "+").replace(/_/g, "/"),
+								content: b64urlToStandard(blob?.data ?? ""),
 							};
 						})
 					: [];

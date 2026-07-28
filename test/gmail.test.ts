@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
 	b64urlEncode,
+	b64urlToStandard,
 	buildRfc822,
 	decodeAttachmentText,
 	escapeHtml,
@@ -651,5 +652,39 @@ describe("gmailFetch", () => {
 	test("returns nothing for a 204, which carries no body to parse", async () => {
 		stub(new Response(null, { status: 204 }));
 		expect(await gmailFetch("tok", "/labels/x", { method: "DELETE" })).toBeNull();
+	});
+});
+
+describe("b64urlToStandard", () => {
+	// Gmail strips the padding from the base64url it returns, and the message
+	// builder rejects anything that is not a multiple of four.
+	test("restores the padding Gmail leaves off", () => {
+		for (let len = 1; len <= 12; len++) {
+			const bytes = Uint8Array.from({ length: len }, (_, i) => i + 1);
+			const standard = btoa(String.fromCharCode(...bytes));
+			const asGmailSends = standard.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+			expect(b64urlToStandard(asGmailSends)).toBe(standard);
+		}
+	});
+
+	test("maps the url-safe alphabet back", () => {
+		expect(b64urlToStandard("-_8")).toBe("+/8=");
+	});
+
+	test("carries a forwarded attachment through the builder", () => {
+		const asGmailSends = btoa("five!").replace(/=+$/, "");
+		const raw = buildRfc822({
+			to: "a@example.com",
+			subject: "Fwd",
+			body: "b",
+			attachments: [
+				{
+					filename: "report.pdf",
+					contentType: "application/pdf",
+					content: b64urlToStandard(asGmailSends),
+				},
+			],
+		});
+		expect(raw).toContain("Content-Disposition: attachment");
 	});
 });

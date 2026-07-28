@@ -43,6 +43,16 @@ function bytesToB64(bytes: Uint8Array): string {
 	return btoa(bin);
 }
 
+// Gmail returns attachment bytes as base64url with the padding stripped, and
+// the message builder accepts only standard base64, whose length is a multiple
+// of four. A length that leaves one byte over is malformed either way and is
+// left to fail in the builder.
+export function b64urlToStandard(data: string): string {
+	const standard = data.replace(/-/g, "+").replace(/_/g, "/");
+	const remainder = standard.length % 4;
+	return remainder === 0 ? standard : standard + "=".repeat(4 - remainder);
+}
+
 export function b64urlEncode(s: string): string {
 	return bytesToB64(new TextEncoder().encode(s))
 		.replace(/\+/g, "-")
