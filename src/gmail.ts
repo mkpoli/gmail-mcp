@@ -272,6 +272,11 @@ function filePart(p: FilePart): string[] {
 function inlinePart(img: InlineImage): string[] {
 	assertHeaderSafe("inline image cid", img.cid);
 	const contentType = assertMediaType(img.contentType);
+	// Nothing but an image can be reached through <img src="cid:...">, so any
+	// other type here is a body part riding along outside the alternative set.
+	if (!contentType.toLowerCase().startsWith("image/")) {
+		throw new Error(`inline images must be an image type, not ${contentType}`);
+	}
 	if (!/^[\w.@-]+$/.test(img.cid)) {
 		throw new Error(`invalid inline image cid: ${img.cid}`);
 	}

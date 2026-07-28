@@ -178,6 +178,20 @@ describe("buildRfc822", () => {
 		).toThrow();
 	});
 
+	// The part is reachable only through <img src="cid:...">, so a non-image type
+	// would be an extra inline body part smuggled past the alternative parts.
+	test("rejects an inline image that is not an image", () => {
+		expect(() =>
+			buildRfc822({
+				to: "a@example.com",
+				subject: "s",
+				body: "b",
+				htmlBody: '<img src="cid:c1">',
+				inlineImages: [{ cid: "c1", contentType: "text/html", content: btoa("<b>x</b>") }],
+			}),
+		).toThrow(/image/);
+	});
+
 	test("requires htmlBody when inline images are present", () => {
 		expect(() =>
 			buildRfc822({
