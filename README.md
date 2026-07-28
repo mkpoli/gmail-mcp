@@ -97,7 +97,7 @@ bun install
 bun run setup
 ```
 
-`bun run setup` creates the KV namespace, asks for the client ID and secret, generates a cookie key, and deploys. Re-running it to rotate a single secret is safe.
+`bun run setup` asks for the client ID and secret, generates a cookie key, and deploys. The `OAUTH_KV` id committed in `wrangler.jsonc` belongs to the account this server runs on, so setup checks whether it is one of yours and offers to create your own namespace when it is not. Re-running it to rotate a single secret is safe.
 
 ### 3 · Connect a client
 

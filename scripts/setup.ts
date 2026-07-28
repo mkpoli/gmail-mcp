@@ -27,7 +27,23 @@ async function confirm(question: string): Promise<boolean> {
 
 const config = readFileSync(CONFIG, "utf8");
 const domain = config.match(/"pattern":\s*"([^"]+)"/)?.[1];
-const kvPlaceholder = config.includes("REPLACE_AT_DEPLOY");
+const kvId = config.match(/"binding":\s*"OAUTH_KV",\s*"id":\s*"([0-9a-f]*)"/s)?.[1] ?? "";
+
+// The id committed here belongs to the account this server was first deployed
+// from. A fork reaching Cloudflare with it is refused, and the message names
+// the namespace rather than the config, so whether the id is one of this
+// account's own is settled here instead of at upload.
+async function kvNamespaceIsOurs(id: string): Promise<boolean> {
+	if (!id) return false;
+	try {
+		const listed = await $`bunx wrangler kv namespace list`.text();
+		return listed.includes(id);
+	} catch {
+		// Not signed in yet, or wrangler could not reach the API. The upload
+		// will say so far more clearly than a guess here would.
+		return true;
+	}
+}
 
 console.log("\n  gmail-mcp setup\n");
 console.log(`  config      ${CONFIG}`);
@@ -35,7 +51,11 @@ console.log(`  domain      ${domain ?? "(no custom domain configured)"}`);
 console.log(`  redirect    https://${domain ?? "<your-domain>"}/callback`);
 console.log("\n  The redirect URI above must exist on your Google OAuth client.\n");
 
-if (kvPlaceholder) {
+if (await kvNamespaceIsOurs(kvId)) {
+	console.log("  KV namespace already configured — skipping.\n");
+} else {
+	console.log(`  The configured KV namespace (${kvId || "none"}) is not in this account.`);
+	console.log("  Every OAuth grant and token lives there, so one is needed here.\n");
 	if (await confirm("  Create the OAuth KV namespace now?")) {
 		const out = await $`bunx wrangler kv namespace create gmail-mcp-oauth`.text();
 		const id = out.match(/"id":\s*"([0-9a-f]+)"/)?.[1];
@@ -44,11 +64,12 @@ if (kvPlaceholder) {
 			console.log("  Copy it into wrangler.jsonc manually, then re-run.\n");
 			process.exit(1);
 		}
-		writeFileSync(CONFIG, config.replace("REPLACE_AT_DEPLOY", id));
+		writeFileSync(
+			CONFIG,
+			kvId ? config.replace(kvId, id) : config.replace(/("binding":\s*"OAUTH_KV",\s*"id":\s*")(")/s, `$1${id}$2`),
+		);
 		console.log(`\n  Wrote namespace ${id} into ${CONFIG}\n`);
 	}
-} else {
-	console.log("  KV namespace already configured — skipping.\n");
 }
 
 const secrets = [

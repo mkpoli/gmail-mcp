@@ -85,7 +85,7 @@ bun install
 bun run setup
 ```
 
-`bun run setup`会创建KV命名空间，询问客户端ID和密钥，生成cookie密钥，然后部署。之后只为轮换某一个密钥重跑也没问题。
+`bun run setup`会询问客户端ID和密钥，生成cookie密钥，然后部署。`wrangler.jsonc`里写的`OAUTH_KV`的id属于这个服务器所在的账号，所以setup会先看它在不在你的账号里，不在就问你要不要新建一个命名空间。之后只为轮换某一个密钥重跑也没问题。
 
 ### 3 · 连接客户端
 
