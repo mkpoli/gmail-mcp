@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
 	b64urlEncode,
 	buildRfc822,
@@ -8,6 +8,8 @@ import {
 	forwardHeaderBlock,
 	forwardHtmlBlock,
 	forwardSubject,
+	GmailApiError,
+	gmailFetch,
 	headerValue,
 	normalizeMessageId,
 	parseAddresses,
@@ -605,5 +607,49 @@ describe("headerValue / summarizeMessage", () => {
 			},
 		};
 		expect(summarizeMessage(copied).cc).toBe("Team <team@example.com>, b@example.org");
+	});
+});
+
+describe("gmailFetch", () => {
+	const realFetch = globalThis.fetch;
+	afterEach(() => {
+		globalThis.fetch = realFetch;
+	});
+
+	function stub(response: Response, seen: { url?: string; init?: RequestInit } = {}) {
+		globalThis.fetch = (async (url: any, init: any) => {
+			seen.url = String(url);
+			seen.init = init;
+			return response;
+		}) as typeof fetch;
+		return seen;
+	}
+
+	test("sends the token as a bearer against the me/ endpoint", async () => {
+		const seen = stub(new Response(JSON.stringify({ ok: 1 }), { status: 200 }));
+		const body = await gmailFetch("tok-123", "/profile");
+		expect(body).toEqual({ ok: 1 });
+		expect(seen.url).toBe("https://gmail.googleapis.com/gmail/v1/users/me/profile");
+		const headers = (seen.init?.headers ?? {}) as Record<string, string>;
+		expect(headers.Authorization).toBe("Bearer tok-123");
+	});
+
+	// The status is what decides whether the caller refreshes the token, backs
+	// off, or gives up, so it has to survive on the error.
+	test("raises the Gmail status as a GmailApiError", async () => {
+		stub(new Response("quota exceeded", { status: 429 }));
+		try {
+			await gmailFetch("tok", "/messages");
+			throw new Error("expected a rejection");
+		} catch (e) {
+			expect(e).toBeInstanceOf(GmailApiError);
+			expect((e as GmailApiError).status).toBe(429);
+			expect((e as GmailApiError).message).toContain("quota exceeded");
+		}
+	});
+
+	test("returns nothing for a 204, which carries no body to parse", async () => {
+		stub(new Response(null, { status: 204 }));
+		expect(await gmailFetch("tok", "/labels/x", { method: "DELETE" })).toBeNull();
 	});
 });
