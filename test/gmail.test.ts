@@ -449,6 +449,28 @@ describe("extractBody", () => {
 	});
 });
 
+describe("a header value whose quotes do not balance", () => {
+	// Folding keeps a quoted string whole, so one stray quote used to swallow
+	// everything after it into a string with no end and no place to break.
+	test("folds a long subject carrying a single stray quote", () => {
+		const subject = `"${Array.from({ length: 200 }, (_, i) => `word${i}`).join(" ")}`;
+		const raw = buildRfc822({ to: "a@example.com", subject, body: "b" });
+		const longest = Math.max(
+			...raw.split("\r\n").map((line) => new TextEncoder().encode(line).length),
+		);
+		expect(longest).toBeLessThanOrEqual(998);
+	});
+
+	test("keeps a balanced quoted display name on one line", () => {
+		const raw = buildRfc822({
+			to: '"Smith, John Q. Public" <john@example.com>',
+			subject: "s",
+			body: "b",
+		});
+		expect(raw).toContain('"Smith, John Q. Public"');
+	});
+});
+
 describe("a message addressed only by Bcc", () => {
 	// The builder admits mail that names no To, and an announcement sent
 	// privately to a list is ordinary mail. What went out was an empty field,

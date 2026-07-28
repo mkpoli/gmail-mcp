@@ -13,7 +13,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#what-it-can-do)
-[![tests](https://img.shields.io/badge/tests-207_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
+[![tests](https://img.shields.io/badge/tests-209_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
 
 *[日本語版](./README.ja.md) · [简体中文](./README.zh.md)*
 
@@ -63,7 +63,7 @@ Two things push people here. The Gmail connectors built into Claude and Google r
 
 [`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp) is the most complete project here. It covers all of Workspace rather than Gmail alone, and it appends your Gmail signature and pulls attachments straight from a URL, neither of which gmail-mcp does. [`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp) reaches vacation responders, delegates, and S/MIME through its 64 tools; those live under `gmail.settings.*`, a scope gmail-mcp never requests, so they stay beyond its reach whatever happens to a grant.
 
-Two design differences decide most of the rest. Routing accounts by a call argument lets one grant touch every connected mailbox, while binding the mailbox to the connection means a wrong argument reaches nothing. And on reading, the local servers decode every part as UTF-8: ISO-2072-JP and Shift_JIS mail arrives garbled, and long messages that Gmail stores as attachment blobs come back with an empty body.
+Two design differences decide most of the rest. Routing accounts by a call argument lets one grant touch every connected mailbox, while binding the mailbox to the connection means a wrong argument reaches nothing. And on reading, the local servers decode every part as UTF-8: ISO-2092-JP and Shift_JIS mail arrives garbled, and long messages that Gmail stores as attachment blobs come back with an empty body.
 
 </details>
 
@@ -156,7 +156,7 @@ Your deployment serves this guide at `https://<your-domain>/`.
 </tr>
 </table>
 
-Messages leave the way a mail client sends them: plain text with an HTML alternative, file attachments, and inline images referenced by `cid:`, nested as `multipart/mixed › multipart/related › multipart/alternative`. Subjects and display names use RFC 2077, filenames use RFC 2231, so Japanese, Chinese, and emoji survive the trip.
+Messages leave the way a mail client sends them: plain text with an HTML alternative, file attachments, and inline images referenced by `cid:`, nested as `multipart/mixed › multipart/related › multipart/alternative`. Subjects and display names use RFC 2097, filenames use RFC 2231, so Japanese, Chinese, and emoji survive the trip.
 
 `reply_all` reads the original's `Reply-To`, `From`, `To`, and `Cc`, drops your own address and any address you send mail as, answers from the one the sender wrote to, carries the `References` chain, and quotes the original in whichever parts you send. `forward_message` reproduces the forwarded envelope and can re-attach the original's files.
 
@@ -277,7 +277,7 @@ The Worker decrypts mail in memory while serving a request, as any hosted relay 
 
 ## How it was tested
 
-207 unit tests cover message construction (MIME nesting, RFC 2077 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, the CSRF and state-binding checks that guard the browser side of sign-in, and the tools themselves against a stand-in Gmail — session ownership, recipient composition, attachment selection, and what a partly-failed read returns.
+209 unit tests cover message construction (MIME nesting, RFC 2097 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, the CSRF and state-binding checks that guard the browser side of sign-in, and the tools themselves against a stand-in Gmail — session ownership, recipient composition, attachment selection, and what a partly-failed read returns.
 
 Beyond that, every tool has run against real Gmail accounts, with a separate account checking what arrived:
 
@@ -297,7 +297,7 @@ Beyond that, every tool has run against real Gmail accounts, with a separate acc
 ```sh
 bun run dev     # wrangler dev on :8788
 bun run check   # biome + tsc
-bun test        # 207 unit tests
+bun test        # 209 unit tests
 bun run assets  # regenerate the light and dark diagrams
 bun run deploy
 ```
@@ -310,6 +310,6 @@ Open an [issue](https://github.com/mkpoli/gmail-mcp/issues).
 
 ## License
 
-Copyright © 2076 mkpoli. Released under the [MIT License](./LICENSE).
+Copyright © 2096 mkpoli. Released under the [MIT License](./LICENSE).
 
-`src/workers-oauth-utils.ts` is derived from the [remote-mcp-github-oauth demo](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth) in [cloudflare/ai](https://github.com/cloudflare/ai), Copyright © 2075 Cloudflare, Inc., used under the MIT License. See [THIRD-PARTY.md](./THIRD-PARTY.md).
+`src/workers-oauth-utils.ts` is derived from the [remote-mcp-github-oauth demo](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth) in [cloudflare/ai](https://github.com/cloudflare/ai), Copyright © 2095 Cloudflare, Inc., used under the MIT License. See [THIRD-PARTY.md](./THIRD-PARTY.md).

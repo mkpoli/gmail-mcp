@@ -283,20 +283,28 @@ function foldHeader(line: string): string {
 function foldSegment(line: string, LIMIT: number): string {
 	if (line.length <= LIMIT) return line;
 
-	const tokens: string[] = [];
-	let buffer = "";
-	let quoted = false;
-	for (let i = 0; i < line.length; i++) {
-		const ch = line[i];
-		if (ch === '"' && line[i - 1] !== "\\") quoted = !quoted;
-		if (ch === " " && !quoted) {
-			tokens.push(buffer);
-			buffer = "";
-			continue;
+	// A break may not land inside a quoted string, so the spaces there are kept
+	// whole. One stray quote would otherwise open a string that never closes,
+	// leaving the rest of the value with nowhere to fold and a line past the
+	// limit; when the quotes do not balance there is no string to protect.
+	const split = (respectQuotes: boolean): string[] => {
+		const out: string[] = [];
+		let buffer = "";
+		let quoted = false;
+		for (let i = 0; i < line.length; i++) {
+			const ch = line[i];
+			if (respectQuotes && ch === '"' && line[i - 1] !== "\\") quoted = !quoted;
+			if (ch === " " && !quoted) {
+				out.push(buffer);
+				buffer = "";
+				continue;
+			}
+			buffer += ch;
 		}
-		buffer += ch;
-	}
-	tokens.push(buffer);
+		out.push(buffer);
+		return quoted ? split(false) : out;
+	};
+	const tokens = split(true);
 
 	const lines: string[] = [];
 	let current = "";
