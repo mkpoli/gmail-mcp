@@ -778,7 +778,10 @@ function b64urlToBytes(s: string): Uint8Array {
 
 export function partCharset(part: GmailPart | undefined): string {
 	const ct = part?.headers?.find((h) => h.name?.toLowerCase() === "content-type")?.value;
-	return ct?.match(/charset="?([\w-]+)"?/i)?.[1] ?? "utf-8";
+	// A parameter may carry whitespace either side of its "=", which a sender
+	// writing ISO-2022-JP or Shift_JIS is as free to do as any other. Reading it
+	// as UTF-8 returns the escape sequences instead of the text.
+	return ct?.match(/charset\s*=\s*"?([\w-]+)"?/i)?.[1] ?? "utf-8";
 }
 
 // Decodes part data honoring its declared charset (ISO-2022-JP and friends);

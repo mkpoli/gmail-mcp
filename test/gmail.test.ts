@@ -18,6 +18,7 @@ import {
 	headerValue,
 	normalizeMessageId,
 	parseAddresses,
+	partCharset,
 	quoteHtml,
 	quotePlain,
 	replyRecipients,
@@ -445,6 +446,19 @@ describe("extractBody", () => {
 			body: { data },
 		};
 		expect(extractBody(payload)).toBe(text);
+	});
+});
+
+describe("partCharset", () => {
+	// A sender may put whitespace either side of a parameter's "=", and reading
+	// the part as UTF-8 hands back the escape sequences rather than the text.
+	test("reads a charset written with spaces around the equals", () => {
+		const of = (value: string) =>
+			partCharset({ headers: [{ name: "Content-Type", value }] } as never);
+		expect(of("text/plain; charset=ISO-2022-JP")).toBe("ISO-2022-JP");
+		expect(of("text/plain; charset = ISO-2022-JP")).toBe("ISO-2022-JP");
+		expect(of('text/plain; charset = "Shift_JIS"')).toBe("Shift_JIS");
+		expect(of("text/plain")).toBe("utf-8");
 	});
 });
 
