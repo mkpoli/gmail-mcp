@@ -12,6 +12,10 @@ const MAX_ENCODED_ATTACHMENT_BYTES = 34_000_000;
 // stretch without one has to fit a line on its own, allowing for the field name.
 const MAX_HEADER_RUN = 900;
 
+// A ceiling on any single Gmail response. Well above an ordinary thread, well
+// under what would exhaust a Worker isolate.
+const MAX_RESPONSE_BYTES = 24_000_000;
+
 export class GmailApiError extends Error {
 	constructor(
 		public status: number,
@@ -25,6 +29,7 @@ export async function gmailFetch(
 	accessToken: string,
 	path: string,
 	init: RequestInit = {},
+	limit: number = MAX_RESPONSE_BYTES,
 ): Promise<any> {
 	const resp = await fetch(`${BASE}${path}`, {
 		...init,
@@ -38,7 +43,35 @@ export async function gmailFetch(
 		throw new GmailApiError(resp.status, await resp.text());
 	}
 	if (resp.status === 204) return null;
-	return resp.json();
+
+	// A whole-thread read returns every message's body, and parsing arrives
+	// before any of the character budgets can apply. Counting the bytes as they
+	// come turns a response that would exhaust the isolate into an error naming
+	// what to do instead.
+	const reader = resp.body?.getReader();
+	if (!reader) return null;
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > limit) {
+			await reader.cancel();
+			throw new GmailApiError(
+				413,
+				`Gmail returned more than ${limit} bytes for ${path}. Read the messages individually, or ask for a thread without bodies.`,
+			);
+		}
+		chunks.push(value);
+	}
+	const body = new Uint8Array(total);
+	let at = 0;
+	for (const chunk of chunks) {
+		body.set(chunk, at);
+		at += chunk.byteLength;
+	}
+	return JSON.parse(new TextDecoder().decode(body));
 }
 
 // Chunked binary-to-base64: a spread into String.fromCharCode overflows the

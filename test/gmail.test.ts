@@ -961,3 +961,33 @@ describe("threading header length", () => {
 		for (const line of raw.split("\r\n")) expect(line.length).toBeLessThanOrEqual(998);
 	});
 });
+
+describe("gmailFetch response ceiling", () => {
+	const realFetch = globalThis.fetch;
+	afterEach(() => {
+		globalThis.fetch = realFetch;
+	});
+
+	// A thread of many large messages is parsed whole before any budget can
+	// apply, so an oversized response is refused while it is still a stream.
+	test("refuses a response past the ceiling instead of parsing it", async () => {
+		const huge = "x".repeat(200);
+		globalThis.fetch = (async () =>
+			new Response(
+				new ReadableStream({
+					start(controller) {
+						for (let i = 0; i < 400; i++) controller.enqueue(new TextEncoder().encode(huge));
+						controller.close();
+					},
+				}),
+				{ status: 200 },
+			)) as unknown as typeof fetch;
+		await expect(gmailFetch("tok", "/threads/x", {}, 1000)).rejects.toThrow(/more than/i);
+	});
+
+	test("passes an ordinary response through", async () => {
+		globalThis.fetch = (async () =>
+			new Response(JSON.stringify({ ok: 1 }), { status: 200 })) as unknown as typeof fetch;
+		expect(await gmailFetch("tok", "/profile")).toEqual({ ok: 1 });
+	});
+});
