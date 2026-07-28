@@ -71,6 +71,8 @@ const ATTACHMENT_INLINE_LIMIT = 200_000;
 // object. Set from the decrypted grant after any inbound copy is removed, so
 // what arrives at the object is what the OAuth layer authenticated.
 const ACCOUNT_HEADER = "x-gmail-mcp-account";
+// How the agent framework will accept a grant if one is written on the request.
+const PROPS_HEADER = "x-partykit-props";
 // The headers a message summary is built from; nothing else is read.
 const SUMMARY_HEADERS = ["From", "To", "Cc", "Subject", "Date"] as const;
 // How long the account's send-as identities are trusted before being read again.
@@ -1195,6 +1197,11 @@ const mcpHandler = {
 
 		const forwarded = new Request(request);
 		forwarded.headers.delete(ACCOUNT_HEADER);
+		// Its sibling: the framework reads a grant straight out of this header
+		// when one is present. Nothing on this path sends it, and the grant the
+		// object runs under is the one passed by name above, so a copy arriving
+		// from a client is only ever an attempt to choose its own.
+		forwarded.headers.delete(PROPS_HEADER);
 		if (email) forwarded.headers.set(ACCOUNT_HEADER, email);
 		return mcpAgent.fetch(forwarded, env, ctx);
 	},

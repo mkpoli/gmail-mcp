@@ -832,3 +832,41 @@ describe("the public OAuth endpoints", () => {
 		});
 	}
 });
+
+describe("the headers the boundary hands on", () => {
+	// The account header is stamped from the decrypted grant, and the framework
+	// will read a whole grant out of x-partykit-props if a client writes one.
+	// Neither belongs to the client, so neither survives the boundary.
+	test("drops a client's own account and props headers", async () => {
+		const seen: Headers[] = [];
+		const original = globalThis.fetch;
+		globalThis.fetch = (async (input: string | URL | Request) => {
+			seen.push(new Request(input).headers);
+			return new Response("{}", { status: 200 });
+		}) as unknown as typeof fetch;
+		try {
+			await worker.fetch(
+				new Request("https://example.com/mcp", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"x-gmail-mcp-account": "intruder@example.com",
+						"x-partykit-props": "eyJlbWFpbCI6ImludHJ1ZGVyQGV4YW1wbGUuY29tIn0=",
+					},
+					body: "{}",
+				}),
+				{} as never,
+				{} as never,
+			);
+		} catch {
+			// The provider refuses the unauthenticated call; what matters is that
+			// nothing downstream ever saw the client's headers.
+		} finally {
+			globalThis.fetch = original;
+		}
+		for (const headers of seen) {
+			expect(headers.get("x-partykit-props")).toBeNull();
+			expect(headers.get("x-gmail-mcp-account")).toBeNull();
+		}
+	});
+});
