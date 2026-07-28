@@ -549,8 +549,22 @@ describe("headerValue / summarizeMessage", () => {
 			snippet: "snippet text",
 			from: "Sender <s@example.com>",
 			to: undefined,
+			cc: undefined,
 			date: "Fri, 25 Jul 2026 10:00:00 +0900",
 			subject: "case test",
 		});
+	});
+
+	test("reports who was copied", () => {
+		const copied = {
+			...message,
+			payload: {
+				headers: [
+					...message.payload.headers,
+					{ name: "Cc", value: "Team <team@example.com>, b@example.org" },
+				],
+			},
+		};
+		expect(summarizeMessage(copied).cc).toBe("Team <team@example.com>, b@example.org");
 	});
 });

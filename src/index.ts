@@ -217,7 +217,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const ids: string[] = (list.messages ?? []).map((m: any) => m.id);
 				const messages = await this.mapLimited(ids, 8, (id) =>
 					this.api(
-						`/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
+						`/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date`,
 					),
 				);
 				return this.text({
@@ -415,7 +415,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				// draft is which; pull the headers that identify them.
 				const detailed = await this.mapLimited(drafts, 8, async (d: any) => {
 					const full = await this.api(
-						`/drafts/${encodeURIComponent(d.id)}?format=metadata&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
+						`/drafts/${encodeURIComponent(d.id)}?format=metadata&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date`,
 					);
 					return {
 						draftId: d.id,

@@ -581,6 +581,7 @@ export function summarizeMessage(m: any) {
 		snippet: m.snippet,
 		from: headerValue(m, "From"),
 		to: headerValue(m, "To"),
+		cc: headerValue(m, "Cc"),
 		date: headerValue(m, "Date"),
 		subject: headerValue(m, "Subject"),
 	};
