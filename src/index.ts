@@ -119,10 +119,11 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		return super.fetch(request);
 	}
 
-	// What an abandoned session leaves behind: the account that owns it and its
-	// most recent access token, which Google expires in an hour. The refresh
-	// token is not here — it stays sealed in the OAuth grant. The agent owns the
-	// object's alarm for its own scheduling, so expiry is not ours to add.
+	// What an abandoned session leaves behind: the account that owns it, its
+	// most recent access token, and the copy of the grant the agent framework
+	// writes on every start — refresh token included, since that is what the
+	// grant carries. The agent owns the object's alarm for its own scheduling,
+	// so expiry is not ours to add.
 	// The transport tears a session down over RPC, without going through fetch(),
 	// so the boundary cannot rely on the gate above for that one. It asks here
 	// instead. An unclaimed session answers yes: claiming happens on first use.
