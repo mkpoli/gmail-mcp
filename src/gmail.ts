@@ -642,16 +642,24 @@ export function replyRecipients(fields: {
 	return { to, cc };
 }
 
+// A subject read from received mail can still hold a line break: Gmail returns
+// some notification subjects with a trailing newline. A header built from one
+// is refused on the way out, which would leave those messages impossible to
+// answer or pass on, so the value is put back on a single line first.
+function singleLine(value: string): string {
+	return value.replace(/[\r\n]+[ \t]*/g, " ").trim();
+}
+
 // Subjects and display names arrive encoded and go back out encoded. Anything
 // built from them has to be read back first, or the words are encoded twice and
 // the reader sees the markup.
 export function replySubject(original: string | undefined): string {
-	const s = original ?? "";
+	const s = singleLine(original ?? "");
 	return /^\s*re:/i.test(s) ? s : `Re: ${s}`;
 }
 
 export function forwardSubject(original: string | undefined): string {
-	const s = original ?? "";
+	const s = singleLine(original ?? "");
 	return /^\s*(fwd?|fw):/i.test(s) ? s : `Fwd: ${s}`;
 }
 

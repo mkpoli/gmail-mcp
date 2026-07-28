@@ -449,6 +449,28 @@ describe("extractBody", () => {
 	});
 });
 
+describe("a subject that arrives carrying a line break", () => {
+	// Gmail returns some notification subjects with a trailing newline — Search
+	// Console does it on every message — and a header built from one is refused
+	// on the way out, leaving those messages impossible to answer or pass on.
+	const live = "サイト aynu.org のページがインデックスに登録されない新しい要因\n";
+
+	test("replies to it", () => {
+		const raw = buildRfc822({ to: "a@example.com", subject: replySubject(live), body: "b" });
+		expect(raw).toContain("Subject: ");
+	});
+
+	test("forwards it", () => {
+		const raw = buildRfc822({ to: "a@example.com", subject: forwardSubject(live), body: "b" });
+		expect(raw).toContain("Subject: ");
+	});
+
+	test("keeps an ordinary subject as it was", () => {
+		expect(replySubject("Quarterly report")).toBe("Re: Quarterly report");
+		expect(forwardSubject("Re: Quarterly report")).toBe("Fwd: Re: Quarterly report");
+	});
+});
+
 describe("a header value whose quotes do not balance", () => {
 	// Folding keeps a quoted string whole, so one stray quote used to swallow
 	// everything after it into a string with no end and no place to break.
