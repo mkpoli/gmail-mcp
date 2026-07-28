@@ -1,5 +1,6 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { getAgentByName } from "agents";
 import { McpAgent } from "agents/mcp";
 import { z } from "zod";
 import {
@@ -107,6 +108,18 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			this.callerAccount = account;
 		}
 		return super.fetch(request);
+	}
+
+	// What an abandoned session leaves behind: the account that owns it and its
+	// most recent access token, which Google expires in an hour. The refresh
+	// token is not here — it stays sealed in the OAuth grant. The agent owns the
+	// object's alarm for its own scheduling, so expiry is not ours to add.
+	// The transport tears a session down over RPC, without going through fetch(),
+	// so the boundary cannot rely on the gate above for that one. It asks here
+	// instead. An unclaimed session answers yes: claiming happens on first use.
+	async isOwnedBy(email: string): Promise<boolean> {
+		const owner = await this.ctx.storage.get<string>("owner");
+		return owner === undefined || owner === email.toLowerCase();
 	}
 
 	// Access tokens live one hour; the refresh token from props mints new ones.
@@ -639,7 +652,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					buildRfc822({
 						to: to.join(", "),
 						cc: rest.length > 0 ? rest.join(", ") : undefined,
-						subject: replySubject(headerValue(original, "Subject")),
+						subject: replySubject(decodeEncodedWords(headerValue(original, "Subject") ?? "")),
 						body: `${body}\n\n${quotePlain(fromDisplay, date, quoted)}`,
 						htmlBody: htmlBody
 							? `${htmlBody}\n<br>\n${quoteHtml(fromDisplay, date, quoted)}`
@@ -677,11 +690,13 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					`/messages/${encodeURIComponent(messageId)}?format=full`,
 				);
 				const fields = {
-					from: headerValue(original, "From"),
+					// This block is body text the recipient reads, so the headers go in
+					// as words rather than as their encoding.
+					from: decodeEncodedWords(headerValue(original, "From") ?? ""),
 					date: headerValue(original, "Date"),
-					subject: headerValue(original, "Subject"),
-					to: headerValue(original, "To"),
-					cc: headerValue(original, "Cc"),
+					subject: decodeEncodedWords(headerValue(original, "Subject") ?? ""),
+					to: decodeEncodedWords(headerValue(original, "To") ?? ""),
+					cc: decodeEncodedWords(headerValue(original, "Cc") ?? ""),
 				};
 				const originalBody = truncate(await this.messageBody(original), THREAD_BODY_LIMIT);
 
@@ -834,7 +849,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 						error: `this attachment encodes to ${data.length} characters, past the ${ATTACHMENT_INLINE_LIMIT} this server returns inline; open it in a mail client`,
 					});
 				}
-				return this.text({ ...meta, dataBase64Url: data });
+				// Handed straight back, this is base64url, which the send tools refuse.
+				// Returning it in the form they accept makes the round trip work.
+				return this.text({ ...meta, contentBase64: b64urlToStandard(data) });
 			},
 		);
 
@@ -1003,6 +1020,24 @@ const mcpHandler = {
 		// a client-supplied one would arrive there looking authenticated. It is
 		// cleared first and the account stamped from the grant the OAuth layer
 		// decrypted, which no client can choose.
+		// The account is settled here rather than inside the object. Two reasons:
+		// the transport tears a session down over RPC without ever calling its
+		// fetch, and a response the object does return is read only for a
+		// WebSocket — status and body are discarded, so a refusal raised there
+		// reaches the client as an unexplained 500.
+		const sessionId = request.headers.get("mcp-session-id");
+		if (email && sessionId) {
+			const session = await getAgentByName<Env, GmailMCP>(
+				env.MCP_OBJECT,
+				`streamable-http:${sessionId}`,
+			);
+			if (!(await session.isOwnedBy(email))) {
+				return new Response("this MCP session belongs to a different Google account", {
+					status: 403,
+				});
+			}
+		}
+
 		const forwarded = new Request(request);
 		forwarded.headers.delete(ACCOUNT_HEADER);
 		if (email) forwarded.headers.set(ACCOUNT_HEADER, email);

@@ -579,6 +579,9 @@ export function replyRecipients(fields: {
 	return { to, cc };
 }
 
+// Subjects and display names arrive encoded and go back out encoded. Anything
+// built from them has to be read back first, or the words are encoded twice and
+// the reader sees the markup.
 export function replySubject(original: string | undefined): string {
 	const s = original ?? "";
 	return /^\s*re:/i.test(s) ? s : `Re: ${s}`;
@@ -724,17 +727,50 @@ function decodePartData(part: GmailPart): string {
 	}
 }
 
+// The entities that turn up in ordinary mail. Anything else is left as written
+// rather than guessed at.
+const HTML_ENTITIES: Record<string, string> = {
+	nbsp: " ",
+	amp: "&",
+	lt: "<",
+	gt: ">",
+	quot: '"',
+	apos: "'",
+	pound: "£",
+	euro: "€",
+	yen: "¥",
+	copy: "©",
+	reg: "®",
+	trade: "™",
+	mdash: "—",
+	ndash: "–",
+	hellip: "…",
+	laquo: "«",
+	raquo: "»",
+	lsquo: "\u2018",
+	rsquo: "\u2019",
+	ldquo: "\u201c",
+	rdquo: "\u201d",
+	middot: "·",
+	bull: "•",
+	deg: "°",
+	times: "×",
+	divide: "÷",
+};
+
 function htmlToText(html: string): string {
 	return html
 		.replace(/<style[\s\S]*?<\/style>/gi, "")
 		.replace(/<script[\s\S]*?<\/script>/gi, "")
 		.replace(/<[^>]+>/g, " ")
-		.replace(/&nbsp;/g, " ")
-		.replace(/&amp;/g, "&")
-		.replace(/&lt;/g, "<")
-		.replace(/&gt;/g, ">")
-		.replace(/&quot;/g, '"')
-		.replace(/&#39;/g, "'")
+		.replace(/&#(\d+);/g, (_m, code: string) => String.fromCodePoint(Number(code)))
+		.replace(/&#[xX]([0-9a-fA-F]+);/g, (_m, hex: string) =>
+			String.fromCodePoint(Number.parseInt(hex, 16)),
+		)
+		.replace(
+			/&(nbsp|amp|lt|gt|quot|apos|pound|euro|yen|copy|reg|trade|mdash|ndash|hellip|laquo|raquo|lsquo|rsquo|ldquo|rdquo|middot|bull|deg|times|divide);/g,
+			(match, name: string) => HTML_ENTITIES[name] ?? match,
+		)
 		.replace(/\s{3,}/g, "\n")
 		.trim();
 }
@@ -746,15 +782,16 @@ function htmlToText(html: string): string {
 // the body shows the wrong content and quotes it into replies and forwards,
 // and the order parts arrive in is the sender's to choose.
 function isBodyPart(part: GmailPart): boolean {
-	if (part.filename) return false;
+	const disposition =
+		part?.headers?.find((h) => h?.name?.toLowerCase() === "content-disposition")?.value ?? "";
+	// A filename usually marks an attachment, but a part that says inline is
+	// part of the message however it is named.
+	if (part.filename && !/^\s*inline/i.test(disposition)) return false;
 	// An enclosed message brings a whole message with it. Its parts belong to
 	// that message, whether or not the enclosure was marked as an attachment.
 	const type = part.mimeType?.toLowerCase() ?? "";
 	if (type.startsWith("message/") || type === "multipart/digest") return false;
-	const disposition = part?.headers?.find(
-		(h) => h?.name?.toLowerCase() === "content-disposition",
-	)?.value;
-	return !/^\s*attachment/i.test(disposition ?? "");
+	return !/^\s*attachment/i.test(disposition);
 }
 
 // Walks only what the sender wrote. An enclosed message brings its own text
