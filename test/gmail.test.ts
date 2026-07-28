@@ -10,6 +10,7 @@ import {
 	forwardHtmlBlock,
 	forwardSubject,
 	headerValue,
+	normalizeMessageId,
 	parseAddresses,
 	quoteHtml,
 	quotePlain,
@@ -513,6 +514,24 @@ describe("reply helpers", () => {
 
 	test("escapeHtml covers the four metacharacters", () => {
 		expect(escapeHtml(`<a href="x">&</a>`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;");
+	});
+});
+
+describe("normalizeMessageId", () => {
+	test("passes a well-formed msg-id through", () => {
+		expect(normalizeMessageId("<CAB123@mail.gmail.com>")).toBe("<CAB123@mail.gmail.com>");
+	});
+
+	test("adds the angle brackets RFC 5322 requires", () => {
+		expect(normalizeMessageId("CAB123@mail.gmail.com")).toBe("<CAB123@mail.gmail.com>");
+		expect(normalizeMessageId("  CAB123@mail.gmail.com  ")).toBe("<CAB123@mail.gmail.com>");
+	});
+
+	// The Gmail API's own message id has no "@" and threads nothing; the caller
+	// has to resolve it to the header value instead of sending it as-is.
+	test("reports a Gmail API id as needing resolution", () => {
+		expect(normalizeMessageId("1932a1b2c3d4e5f6")).toBeNull();
+		expect(normalizeMessageId("")).toBeNull();
 	});
 });
 

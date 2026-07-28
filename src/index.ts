@@ -13,6 +13,7 @@ import {
 	GmailApiError,
 	gmailFetch,
 	headerValue,
+	normalizeMessageId,
 	parseAddresses,
 	quoteHtml,
 	quotePlain,
@@ -184,6 +185,25 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		);
 		if (!att?.data) return "";
 		return decodeAttachmentText(att.data, ref.mimeType, ref.charset);
+	}
+
+	// A caller aiming to reply often has the Gmail message id to hand rather than
+	// the Message-ID header, and the two are not interchangeable: the API id in
+	// In-Reply-To produces a header no receiver can thread on, so the reply lands
+	// as a new conversation. Look the header up when that is what arrived.
+	private async threadHeaderFor(inReplyTo: string): Promise<string> {
+		const direct = normalizeMessageId(inReplyTo);
+		if (direct) return direct;
+		const m = await this.api(
+			`/messages/${encodeURIComponent(inReplyTo)}?format=metadata&metadataHeaders=Message-ID`,
+		);
+		const resolved = headerValue(m, "Message-ID");
+		if (!resolved) {
+			throw new Error(
+				`message ${inReplyTo} carries no Message-ID header to reply to; pass the Message-ID header value as inReplyTo`,
+			);
+		}
+		return resolved;
 	}
 
 	private text(data: unknown) {
@@ -432,14 +452,16 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 		this.server.tool(
 			"send_message",
-			`Send mail as ${account}. For replies pass threadId plus the original's Message-ID header as inReplyTo`,
+			`Send mail as ${account}. For replies pass threadId plus the original's Message-ID header, or its Gmail message id, as inReplyTo`,
 			{
 				...draftFields,
 				threadId: z.string().optional(),
 				inReplyTo: z
 					.string()
 					.optional()
-					.describe("Message-ID header value of the message being replied to"),
+					.describe(
+						"Message-ID header value of the message being replied to; a Gmail message id is resolved to it",
+					),
 			},
 			async ({
 				to,
@@ -454,6 +476,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				threadId,
 				inReplyTo,
 			}) => {
+				const threadHeader = inReplyTo ? await this.threadHeaderFor(inReplyTo) : undefined;
 				const raw = b64urlEncode(
 					buildRfc822({
 						to,
@@ -465,8 +488,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 						htmlBody,
 						attachments,
 						inlineImages,
-						inReplyTo,
-						references: inReplyTo,
+						inReplyTo: threadHeader,
+						references: threadHeader,
 					}),
 				);
 				const m = await this.api("/messages/send", {

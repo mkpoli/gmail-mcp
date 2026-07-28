@@ -466,6 +466,16 @@ export function quoteHtml(from: string, date: string, plainBody: string): string
 	].join("\n");
 }
 
+// RFC 5322 §3.6.4 spells a msg-id "<id-left@id-right>", and In-Reply-To carries
+// that header value. The Gmail API's own message id contains no "@" and threads
+// nothing, so a caller passing one has to resolve it to the real Message-ID;
+// null says which case this is.
+export function normalizeMessageId(value: string): string | null {
+	const trimmed = value.trim();
+	if (!trimmed.includes("@")) return null;
+	return /^<[\s\S]*>$/.test(trimmed) ? trimmed : `<${trimmed}>`;
+}
+
 export function headerValue(message: any, name: string): string | undefined {
 	return message?.payload?.headers?.find((h: any) => h.name.toLowerCase() === name.toLowerCase())
 		?.value;
