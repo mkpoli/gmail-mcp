@@ -273,7 +273,7 @@ The Worker decrypts mail in memory while serving a request, as any hosted relay 
 
 ## How it was tested
 
-165 unit tests cover message construction (MIME nesting, RFC 2047 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, and the CSRF and state-binding checks that guard the browser side of sign-in.
+165 unit tests cover message construction (MIME nesting, RFC 2047 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, the CSRF and state-binding checks that guard the browser side of sign-in, and the tools themselves against a stand-in Gmail — session ownership, recipient composition, attachment selection, and what a partly-failed read returns.
 
 Beyond that, every tool has run against real Gmail accounts, with a separate account checking what arrived:
 
