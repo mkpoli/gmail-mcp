@@ -45,6 +45,12 @@
 			}
 		]
 	},
+	// The local redirect URI is registered with Google by hand, so the port has
+	// to be the same every run — wrangler otherwise starts at 8787 and moves on
+	// to another port whenever that one is taken.
+	"dev": {
+		"port": 8788
+	},
 	"observability": {
 		"enabled": true
 	},
