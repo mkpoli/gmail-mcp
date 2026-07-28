@@ -6,7 +6,13 @@ const BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 // Assembling a message copies it several times over — normalised, wrapped,
 // joined, encoded — so what may arrive is bounded well below both Gmail's own
 // 25 MB limit and the isolate's memory, rather than just under them.
-const MAX_ENCODED_ATTACHMENT_BYTES = 8_000_000;
+export const MAX_ENCODED_ATTACHMENT_BYTES = 8_000_000;
+
+// What a run of bytes costs once base64 has been applied to it. Callers that
+// bound a fetch need the same figure the builder will compare against.
+export function encodedSize(bytes: number): number {
+	return Math.ceil(bytes / 3) * 4;
+}
 // The written parts of a message are bounded too; nothing else caps them.
 const MAX_BODY_CHARS = 1_000_000;
 
@@ -20,6 +26,8 @@ const MAX_HEADER_RUN = 900;
 const MAX_RESPONSE_BYTES = 6_000_000;
 // How long a single Gmail call may take before it is abandoned.
 const GMAIL_TIMEOUT_MS = 30_000;
+// As much of a failure as is worth repeating back to the caller.
+const MAX_ERROR_BYTES = 4_000;
 
 // The parts of Gmail's message shape this server reads. Everything is optional
 // because the API omits fields by format and by message: a metadata read has no
@@ -72,7 +80,9 @@ export async function gmailFetch<T = unknown>(
 		},
 	});
 	if (!resp.ok) {
-		throw new GmailApiError(resp.status, await resp.text());
+		// An error body is a response like any other, and nothing else caps it.
+		const detail = (await resp.text()).slice(0, MAX_ERROR_BYTES);
+		throw new GmailApiError(resp.status, detail);
 	}
 	if (resp.status === 204) return null as T;
 
@@ -452,8 +462,10 @@ export function buildRfc822({
 	] as const) {
 		if (value) assertLiteralFits(name, value);
 	}
-	if (!to.trim()) {
-		throw new Error("a message needs at least one recipient");
+	if (!to.trim() && !cc?.trim() && !bcc?.trim()) {
+		// A message may name no To at all as long as it reaches someone: a
+		// Bcc-only announcement is ordinary mail, not a mistake.
+		throw new Error("a message needs at least one recipient in To, Cc or Bcc");
 	}
 	if (inlineImages.length > 0 && !htmlBody) {
 		throw new Error("inline images require an htmlBody that references their cid");

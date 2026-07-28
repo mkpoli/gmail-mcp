@@ -6,6 +6,7 @@ import {
 	canonicalAddress,
 	decodeAttachmentText,
 	decodeEncodedWords,
+	encodedSize,
 	escapeHtml,
 	extractBody,
 	forwardHeaderBlock,
@@ -1173,5 +1174,33 @@ describe("enclosed messages and encoded words", () => {
 				],
 			}),
 		).toThrow(/too long/);
+	});
+});
+
+describe("recipients a message may carry", () => {
+	// RFC 5322 §3.6.3 requires a destination, not a To specifically. A Bcc-only
+	// announcement is ordinary mail.
+	test("sends with only Bcc", () => {
+		const raw = buildRfc822({ to: "", bcc: "hidden@example.com", subject: "s", body: "b" });
+		expect(raw).toContain("Bcc: hidden@example.com");
+	});
+
+	test("sends with only Cc", () => {
+		const raw = buildRfc822({ to: "", cc: "copied@example.com", subject: "s", body: "b" });
+		expect(raw).toContain("Cc: copied@example.com");
+	});
+
+	test("refuses a message addressed to nobody at all", () => {
+		expect(() => buildRfc822({ to: "  ", subject: "s", body: "b" })).toThrow(/at least one/);
+	});
+});
+
+describe("encodedSize", () => {
+	// The forward path bounds a fetch with this; the builder compares the same
+	// figure, so the two have to agree or a fetch passes and the build fails.
+	test("reports what base64 costs", () => {
+		expect(encodedSize(3)).toBe(4);
+		expect(encodedSize(2_000_000)).toBe(2_666_668);
+		expect(encodedSize(0)).toBe(0);
 	});
 });

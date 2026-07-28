@@ -9,6 +9,7 @@ import {
 	buildRfc822,
 	decodeAttachmentText,
 	decodeEncodedWords,
+	encodedSize,
 	extractBody,
 	forwardHeaderBlock,
 	forwardHtmlBlock,
@@ -18,6 +19,7 @@ import {
 	type GmailPart,
 	gmailFetch,
 	headerValue,
+	MAX_ENCODED_ATTACHMENT_BYTES,
 	normalizeMessageId,
 	parseAddresses,
 	partCharset,
@@ -712,8 +714,10 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 							// The builder's ceiling is reached only once everything is in
 							// memory, which for a forward is far too late: these bytes come
 							// from Gmail rather than from the caller.
-							carriedBytes += a.size;
-							if (carriedBytes > ATTACHMENT_BYTE_LIMIT * 4) {
+							// Counted the way the builder counts, so what passes here is
+							// what it will accept rather than a different figure.
+							carriedBytes += encodedSize(a.size);
+							if (carriedBytes > MAX_ENCODED_ATTACHMENT_BYTES) {
 								throw new Error(
 									"this message carries more attachment data than can be forwarded; forward it from a mail client",
 								);

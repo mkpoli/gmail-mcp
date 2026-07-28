@@ -688,7 +688,7 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
 
           <div class="card">
 
-            <h2 class="alert"><strong>${clientName || "A new MCP Client"}</strong> is requesting access</h1>
+            <h2 class="alert"><strong>${clientName || "A new MCP Client"}</strong> is requesting access</h2>
 
             <div class="client-info">
               <div class="client-detail">
