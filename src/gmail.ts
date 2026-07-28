@@ -556,7 +556,7 @@ function b64urlToBytes(s: string): Uint8Array {
 	return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
 }
 
-function partCharset(part: any): string {
+export function partCharset(part: any): string {
 	const ct = part?.headers?.find((h: any) => h.name.toLowerCase() === "content-type")?.value;
 	return ct?.match(/charset="?([\w-]+)"?/i)?.[1] ?? "utf-8";
 }

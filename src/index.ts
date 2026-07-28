@@ -16,6 +16,7 @@ import {
 	headerValue,
 	normalizeMessageId,
 	parseAddresses,
+	partCharset,
 	quoteHtml,
 	quotePlain,
 	replyRecipients,
@@ -680,9 +681,15 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				// message carrying a single attachment leaves nothing to choose
 				// between; the id is still tried first for the messages where it
 				// does stay put.
+				const named = filename ? parts.filter((a) => a.filename === filename) : [];
+				if (named.length > 1) {
+					throw new Error(
+						`this message carries ${named.length} attachments named ${filename}; they cannot be told apart once Gmail has reissued their ids`,
+					);
+				}
 				const part =
 					parts.find((a) => a.attachmentId === attachmentId) ??
-					(filename ? parts.find((a) => a.filename === filename) : undefined) ??
+					named[0] ??
 					(parts.length === 1 ? parts[0] : undefined);
 				if (!part) {
 					const names = parts.map((a) => a.filename).join(", ");
@@ -715,7 +722,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					}
 					return this.text({
 						...meta,
-						text: truncate(decodeAttachmentText(data, part.mimeType, "utf-8"), BODY_LIMIT),
+						text: truncate(decodeAttachmentText(data, part.mimeType, part.charset), BODY_LIMIT),
 					});
 				}
 				return this.text({ ...meta, dataBase64Url: data });
@@ -836,7 +843,13 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 function collectAttachments(payload: any) {
 	// attachmentId is what get_attachment needs, so it belongs in every listing.
-	const out: { filename: string; mimeType: string; size: number; attachmentId: string }[] = [];
+	const out: {
+		filename: string;
+		mimeType: string;
+		size: number;
+		attachmentId: string;
+		charset: string;
+	}[] = [];
 	const walk = (p: any) => {
 		if (!p) return;
 		if (p.filename && p.body?.attachmentId) {
@@ -845,6 +858,9 @@ function collectAttachments(payload: any) {
 				mimeType: p.mimeType,
 				size: p.body.size,
 				attachmentId: p.body.attachmentId,
+				// A text attachment declares its own encoding, and decoding
+				// ISO-2022-JP as UTF-8 returns replacement characters.
+				charset: partCharset(p),
 			});
 		}
 		(p.parts ?? []).forEach(walk);
