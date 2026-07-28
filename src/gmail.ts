@@ -50,12 +50,6 @@ export function b64urlEncode(s: string): string {
 		.replace(/=+$/, "");
 }
 
-export function b64urlDecode(s: string): string {
-	const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
-	const bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
-	return new TextDecoder().decode(bytes);
-}
-
 // Header values are attacker-influenceable through prompt injection (mail
 // content steers the model, the model fills tool arguments), so CR/LF must
 // never reach the raw RFC822 header block: it would smuggle extra headers,

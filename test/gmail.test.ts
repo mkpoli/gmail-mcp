@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-	b64urlDecode,
 	b64urlEncode,
 	buildRfc822,
 	decodeAttachmentText,
@@ -19,6 +18,13 @@ import {
 	textPartAttachment,
 	truncate,
 } from "../src/gmail";
+
+// The encoder's counterpart, kept here because nothing in the Worker decodes
+// base64url — these tests are its only caller.
+function b64urlDecode(s: string): string {
+	const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+	return new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0)));
+}
 
 describe("b64url", () => {
 	test("round-trips ASCII", () => {
