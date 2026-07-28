@@ -30,9 +30,7 @@
 	"vars": {
 		// How many distinct Google accounts may ever complete sign-in. Raise it
 		// for a shared deployment; Google caps unverified apps at 100 users.
-		"MAX_ACCOUNTS": "25",
-		// Gmail calls allowed per account per minute, across all its sessions.
-		"CALLS_PER_MINUTE": "120"
+		"MAX_ACCOUNTS": "25"
 	},
 	"unsafe": {
 		"bindings": [
@@ -40,6 +38,9 @@
 				"name": "RATE_LIMITER",
 				"type": "ratelimit",
 				"namespace_id": "1001",
+				// Gmail calls allowed per account, counted across all its sessions.
+				// The binding reads these at build time — limit() takes only a key —
+				// so this is where the ceiling is set.
 				"simple": { "limit": 120, "period": 60 }
 			}
 		]

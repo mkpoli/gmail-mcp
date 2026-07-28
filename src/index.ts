@@ -23,7 +23,7 @@ import {
 	truncate,
 } from "./gmail";
 import { GoogleHandler } from "./google-handler";
-import { type Props, parseLimit, refreshGoogleToken } from "./utils";
+import { type Props, refreshGoogleToken } from "./utils";
 
 type TokenCache = { accessToken: string; expiresAt: number };
 
@@ -124,10 +124,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		if (!limiter) return;
 		const { success } = await limiter.limit({ key: this.grantProps.email.toLowerCase() });
 		if (!success) {
-			const perMinute = parseLimit(this.env.CALLS_PER_MINUTE, 120);
-			throw new Error(
-				`rate limit reached for this account (about ${perMinute} Gmail calls a minute); retry shortly`,
-			);
+			throw new Error("rate limit reached for this account; retry shortly");
 		}
 	}
 
