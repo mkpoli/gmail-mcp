@@ -754,12 +754,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				};
 				const originalBody = truncate(await this.messageBody(original), THREAD_BODY_LIMIT);
 
-				const carried = collectAttachments(original.payload).filter(
-					(a) => a.size <= ATTACHMENT_BYTE_LIMIT,
-				);
-				const skipped = collectAttachments(original.payload)
-					.filter((a) => a.size > ATTACHMENT_BYTE_LIMIT)
-					.map((a) => a.filename);
+				const own = collectAttachments(original.payload).filter((a) => !a.enclosed);
+				const carried = own.filter((a) => a.size <= ATTACHMENT_BYTE_LIMIT);
+				const skipped = own.filter((a) => a.size > ATTACHMENT_BYTE_LIMIT).map((a) => a.filename);
 				let carriedBytes = 0;
 				const fetched = includeAttachments
 					? await this.mapLimited(carried, 4, async (a) => {
@@ -1038,6 +1035,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 // of base64 into every read of it, beside a body that is capped at a fraction of
 // that. They are fetched when they are asked for.
 function describeAttachment(a: {
+	enclosed: boolean;
 	filename: string;
 	mimeType: string;
 	size: number;
@@ -1050,11 +1048,14 @@ function describeAttachment(a: {
 		size: a.size,
 		attachmentId: a.attachmentId,
 		charset: a.charset,
+		// Only said when true, so an ordinary listing stays as it was.
+		...(a.enclosed ? { insideForwardedMessage: true } : {}),
 	};
 }
 
 function collectAttachments(payload: GmailPart | undefined) {
 	const out: {
+		enclosed: boolean;
 		filename: string;
 		mimeType: string;
 		size: number;
@@ -1066,10 +1067,11 @@ function collectAttachments(payload: GmailPart | undefined) {
 		data: string;
 		charset: string;
 	}[] = [];
-	const walk = (p: GmailPart | undefined) => {
+	const walk = (p: GmailPart | undefined, enclosed: boolean) => {
 		if (!p) return;
 		if (p.filename && (p.body?.attachmentId || p.body?.data)) {
 			out.push({
+				enclosed,
 				filename: p.filename,
 				mimeType: p.mimeType ?? "application/octet-stream",
 				size: p.body.size ?? 0,
@@ -1080,9 +1082,14 @@ function collectAttachments(payload: GmailPart | undefined) {
 				charset: partCharset(p),
 			});
 		}
-		(p.parts ?? []).forEach(walk);
+		// A message forwarded as a file brings its own attachments with it. They
+		// are worth naming, so get_attachment can fetch one without pulling the
+		// whole enclosure, but re-attaching them to a forward would send the
+		// same file twice: once inside the enclosure and once beside it.
+		const inside = enclosed || (p.mimeType ?? "").toLowerCase().startsWith("message/");
+		for (const child of p.parts ?? []) walk(child, inside);
 	};
-	walk(payload);
+	walk(payload, false);
 	return out;
 }
 

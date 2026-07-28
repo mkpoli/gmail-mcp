@@ -475,6 +475,70 @@ describe("attachments that arrive whole", () => {
 	});
 });
 
+describe("a message that arrived as a file", () => {
+	// Abuse reports and bounce chains arrive this way: the mail carries another
+	// message as an attachment, and that message carries files of its own.
+	const enclosing = message("m1", {
+		payload: {
+			mimeType: "multipart/mixed",
+			parts: [
+				{ mimeType: "text/plain", body: { data: b64url("see attached") } },
+				{
+					mimeType: "message/rfc822",
+					filename: "inner.eml",
+					body: { size: 900, attachmentId: "ATT-outer" },
+					parts: [
+						{
+							mimeType: "multipart/mixed",
+							parts: [
+								{ mimeType: "text/plain", body: { data: b64url("inner body") } },
+								{
+									mimeType: "application/pdf",
+									filename: "invoice.pdf",
+									body: { size: 500, attachmentId: "ATT-inner" },
+								},
+							],
+						},
+					],
+				},
+			],
+		},
+	});
+
+	test("names the file inside it, and says where it is", async () => {
+		const { handlers } = await boot();
+		serveGmail([[/\/messages\/m1\?format=full/, () => enclosing]]);
+		const out = result(await tool(handlers, "get_message")({ messageId: "m1" }));
+		expect(out.attachments).toEqual([
+			expect.objectContaining({ filename: "inner.eml" }),
+			expect.objectContaining({ filename: "invoice.pdf", insideForwardedMessage: true }),
+		]);
+	});
+
+	// Re-attaching it would send the same file twice — once inside the
+	// enclosure and once beside it — and charge the forward for both.
+	test("forwards the enclosure once, without the file already inside it", async () => {
+		const { handlers } = await boot();
+		serveGmail([
+			[/\/messages\/m1\?format=full/, () => enclosing],
+			[/\/attachments\//, () => ({ size: 900, data: b64url("outer bytes") })],
+			[/\/messages\/send/, () => ({ id: "f1", threadId: "t2" })],
+		]);
+		const out = result(
+			await tool(
+				handlers,
+				"forward_message",
+			)({
+				messageId: "m1",
+				to: "b@example.com",
+				includeAttachments: true,
+			}),
+		);
+		expect(out.attachmentsForwarded).toBe(1);
+		expect(requests.filter((r) => r.url.includes("ATT-inner"))).toHaveLength(0);
+	});
+});
+
 describe("what a listing carries", () => {
 	// A read that only wanted the body should not pay for the attachments. The
 	// bytes are fetched when they are asked for, not carried in every listing.
