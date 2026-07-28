@@ -25,7 +25,6 @@
 
 ## ⚖️ 他のサーバーとの比較
 
-
 <p align="center">
 <img src="./docs/comparison-ja.svg" alt="gmail-mcpと公式コネクタ、google_workspace_mcp、Gmail-MCP-Serverの比較" width="880">
 </p>
@@ -59,7 +58,6 @@
 ---
 
 ## 🚀 導入
-
 
 所要時間は10分ほどです。独自ドメインを設定したCloudflareアカウント、[Bun](https://bun.sh)、Googleアカウントを用意してください。
 
@@ -105,7 +103,6 @@ Claude Codeでは`/mcp`を実行し、接続ごとに対応するGoogleアカウ
 ---
 
 ## 🔮 できること
-
 
 <table>
 <tr><th align="left">📖 読む</th><th align="left">✍️ 書く</th><th align="left">🏷 整理する</th></tr>
@@ -156,7 +153,6 @@ Claude Codeでは`/mcp`を実行し、接続ごとに対応するGoogleアカウ
 ---
 
 ## 🏗 仕組み
-
 
 1つのWorkerで2つのOAuthフローを処理します。MCPクライアントはWorkerに接続するための認証を受け、WorkerはGoogleからメールボックスへのアクセス認可を受けます。MCPクライアントにGoogleのトークンは渡らず、GoogleにMCP側の認証情報は渡りません。
 
@@ -220,7 +216,6 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 
 ## 🔑 サインインできるアカウント
 
-
 `ALLOWED_EMAILS`で指定します。同意画面のあと、認可情報を発行する前に、Googleが確認済みとして返したメールアドレスと照合します。
 
 | 値 | サインインできるアカウント |
@@ -236,7 +231,6 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 
 ## 📊 上限
 
-
 第三者に公開した場合に利用枠を使い切られないよう、2つの上限を設けています。どちらも`wrangler.jsonc`で変更できます。
 
 | 設定 | 場所 | 既定値 | 制限する対象 |
@@ -249,7 +243,6 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 ---
 
 ## 🔒 セキュリティ
-
 
 自分で運用する場合も、CloudflareやGoogleへの信頼は必要です。トークンとメール本文の保存先を以下に示します。
 
@@ -264,7 +257,6 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 ---
 
 ## ✅ テスト
-
 
 87件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定を検証しています。
 
@@ -283,7 +275,6 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 
 ## 🛠 開発
 
-
 ```sh
 bun run dev     # wrangler dev、:8788
 bun run check   # biome + tsc
@@ -296,13 +287,11 @@ bun run deploy
 
 ## 📮 お問い合わせ
 
-
 不具合の報告や機能のご要望は、[Issues](https://github.com/mkpoli/gmail-mcp/issues)へお寄せください。
 
 ---
 
 ## ライセンス
-
 
 Copyright © 2026 mkpoli. [MIT License](./LICENSE)で公開しています。
 
