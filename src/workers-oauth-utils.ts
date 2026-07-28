@@ -425,6 +425,35 @@ export async function addApprovedClient(
 /**
  * Configuration for the approval dialog
  */
+// Encodes the round-tripped request as UTF-8 before base64: btoa refuses any
+// code point past U+00FF, and a state parameter may carry any script.
+function encodeState(state: Record<string, unknown>): string {
+	const json = new TextEncoder().encode(JSON.stringify(state));
+	let binary = "";
+	for (const byte of json) binary += String.fromCharCode(byte);
+	return btoa(binary);
+}
+
+// Reads back what renderApprovalDialog signed. A blob that was altered, or
+// signed with another key, is refused rather than acted on.
+export async function verifyApprovalState(
+	encoded: string,
+	cookieSecret: string,
+): Promise<string | null> {
+	const parts = encoded.split(".");
+	if (parts.length !== 2) return null;
+	const [signature, payload] = parts as [string, string];
+	// Verified against what was signed — the encoded form — and only decoded
+	// once it is known to be ours.
+	if (!(await verifySignature(signature, payload, cookieSecret))) return null;
+	try {
+		const bytes = Uint8Array.from(atob(payload), (ch) => ch.charCodeAt(0));
+		return new TextDecoder().decode(bytes);
+	} catch {
+		return null;
+	}
+}
+
 export interface ApprovalDialogOptions {
 	/**
 	 * Client information to display in the approval dialog
@@ -451,6 +480,10 @@ export interface ApprovalDialogOptions {
 	 * Set-Cookie header for the CSRF token
 	 */
 	setCookie: string;
+	/**
+	 * Key the round-tripped request is signed with
+	 */
+	cookieSecret: string;
 }
 
 /**
@@ -462,16 +495,21 @@ export interface ApprovalDialogOptions {
  * @param options - Configuration for the approval dialog
  * @returns A Response containing the HTML approval dialog
  */
-export function renderApprovalDialog(request: Request, options: ApprovalDialogOptions): Response {
+export async function renderApprovalDialog(
+	request: Request,
+	options: ApprovalDialogOptions,
+): Promise<Response> {
 	const { client, server, state, csrfToken, setCookie } = options;
 
 	// A client may put any text in its state parameter, and btoa refuses anything
 	// past U+00FF. The JSON is encoded as UTF-8 first so a non-Latin script in
 	// the round-tripped request cannot take the sign-in down.
-	const json = new TextEncoder().encode(JSON.stringify(state));
-	let binary = "";
-	for (const byte of json) binary += String.fromCharCode(byte);
-	const encodedState = btoa(binary);
+	// The form carries the parsed request back, and the POST that receives it
+	// acts on what it says: which client is being granted, which redirect it
+	// returns to, whether a PKCE challenge is present. Signed here and verified
+	// there, so the grant that is issued is the one the dialog described.
+	const payload = encodeState(state);
+	const encodedState = `${await signData(payload, options.cookieSecret)}.${payload}`;
 
 	const serverName = sanitizeText(server.name);
 	const clientName = client?.clientName ? sanitizeText(client.clientName) : "Unknown MCP Client";

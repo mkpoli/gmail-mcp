@@ -70,6 +70,8 @@ const ATTACHMENT_INLINE_LIMIT = 200_000;
 // object. Set from the decrypted grant after any inbound copy is removed, so
 // what arrives at the object is what the OAuth layer authenticated.
 const ACCOUNT_HEADER = "x-gmail-mcp-account";
+// The headers a message summary is built from; nothing else is read.
+const SUMMARY_HEADERS = ["From", "To", "Cc", "Subject", "Date"] as const;
 
 const filePartSchema = z.object({
 	filename: z.string(),
@@ -373,8 +375,15 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					.describe("Newest messages are kept when a thread exceeds this"),
 			},
 			async ({ threadId, includeBodies, maxMessages }) => {
+				// A metadata read returns every header of every message — Received
+				// chains, DKIM and ARC signatures, List-* — where five are read.
+				// Naming them turns a long thread from megabytes into kilobytes,
+				// which is what makes this the escape hatch the size error promises.
+				const threadQuery = includeBodies
+					? "format=full"
+					: `format=metadata${SUMMARY_HEADERS.map((h) => `&metadataHeaders=${h}`).join("")}`;
 				const t = await this.api<{ messages?: GmailMessage[] }>(
-					`/threads/${encodeURIComponent(threadId)}?format=${includeBodies ? "full" : "metadata"}`,
+					`/threads/${encodeURIComponent(threadId)}?${threadQuery}`,
 				);
 				const all: GmailMessage[] = t.messages ?? [];
 				const kept = all.slice(-maxMessages);

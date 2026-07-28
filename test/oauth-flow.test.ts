@@ -5,10 +5,12 @@ import {
 	createOAuthState,
 	generateCSRFProtection,
 	OAuthError,
+	renderApprovalDialog,
 	sanitizeText,
 	sanitizeUrl,
 	validateCSRFToken,
 	validateOAuthState,
+	verifyApprovalState,
 } from "../src/workers-oauth-utils";
 
 const AUTH_REQUEST = {
@@ -180,5 +182,52 @@ describe("OAuth state binding", () => {
 		expect(value).toMatch(/^[0-9a-f]{64}$/);
 		expect(setCookie).toContain("HttpOnly");
 		expect(setCookie).toContain("Secure");
+	});
+});
+
+describe("approval blob signing", () => {
+	const SECRET = "approval-secret";
+
+	async function dialogState(clientId: string): Promise<string> {
+		const response = await renderApprovalDialog(new Request("https://server.test/authorize"), {
+			client: { clientId, clientName: "Test client" } as never,
+			csrfToken: "csrf",
+			server: { name: "Gmail MCP" },
+			setCookie: "x=1",
+			cookieSecret: SECRET,
+			state: { oauthReqInfo: { clientId, redirectUri: "https://client.test/cb" } },
+		});
+		const html = await response.text();
+		return html.match(/name="state" value="([^"]+)"/)?.[1] ?? "";
+	}
+
+	it("reads back a blob it signed", async () => {
+		const blob = await dialogState("client-a");
+		const json = await verifyApprovalState(blob, SECRET);
+		expect(json).not.toBeNull();
+		expect(JSON.parse(json ?? "{}").oauthReqInfo.clientId).toBe("client-a");
+	});
+
+	// The POST acts on what the blob says — which client is granted, and whether
+	// a PKCE challenge is present — so an altered one must not be acted on.
+	it("refuses a blob whose contents were changed", async () => {
+		const blob = await dialogState("client-a");
+		const [signature] = blob.split(".");
+		const forged = JSON.stringify({
+			oauthReqInfo: { clientId: "client-b", redirectUri: "https://attacker.test/cb" },
+		});
+		const bytes = new TextEncoder().encode(forged);
+		let binary = "";
+		for (const byte of bytes) binary += String.fromCharCode(byte);
+		expect(await verifyApprovalState(`${signature}.${btoa(binary)}`, SECRET)).toBeNull();
+	});
+
+	it.each([
+		["another key", async () => `${await dialogState("client-a")}`],
+		["no signature", async () => btoa('{"oauthReqInfo":{"clientId":"x"}}')],
+	])("refuses a blob with %s", async (name, make) => {
+		const blob = await make();
+		const secret = name === "another key" ? "a-different-secret" : SECRET;
+		expect(await verifyApprovalState(blob, secret)).toBeNull();
 	});
 });

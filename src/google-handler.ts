@@ -21,6 +21,7 @@ import {
 	renderApprovalDialog,
 	validateCSRFToken,
 	validateOAuthState,
+	verifyApprovalState,
 } from "./workers-oauth-utils";
 
 // gmail.modify covers read, search, labels, trash, drafts, and send,
@@ -122,7 +123,7 @@ app.get("/authorize", async (c) => {
 
 	const { token: csrfToken, setCookie } = generateCSRFProtection();
 
-	return renderApprovalDialog(c.req.raw, {
+	return await renderApprovalDialog(c.req.raw, {
 		client,
 		csrfToken,
 		server: {
@@ -131,6 +132,7 @@ app.get("/authorize", async (c) => {
 			name: "Gmail MCP",
 		},
 		setCookie,
+		cookieSecret: env.COOKIE_ENCRYPTION_KEY,
 		state: { oauthReqInfo },
 	});
 });
@@ -159,10 +161,16 @@ app.post("/authorize", async (c) => {
 			return c.text("Missing state in form data", 400);
 		}
 
+		// Only a blob this server signed is acted on. Without this the POST would
+		// grant whatever the form said — another client, or the same one with its
+		// PKCE challenge removed — while the dialog named something else.
+		const verified = await verifyApprovalState(encodedState, env.COOKIE_ENCRYPTION_KEY);
+		if (verified === null) {
+			return c.text("Invalid state data", 400);
+		}
 		let state: { oauthReqInfo?: AuthRequest };
 		try {
-			const bytes = Uint8Array.from(atob(encodedState), (ch) => ch.charCodeAt(0));
-			state = JSON.parse(new TextDecoder().decode(bytes));
+			state = JSON.parse(verified);
 		} catch (_e) {
 			return c.text("Invalid state data", 400);
 		}
