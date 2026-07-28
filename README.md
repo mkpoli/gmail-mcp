@@ -250,6 +250,8 @@ Two ceilings keep a shared deployment from being drained, both set in `wrangler.
 | `MAX_ACCOUNTS` | `vars` | `25` | How many distinct Google accounts may ever complete sign-in. Accounts already connected keep working when the cap is reached; new ones are turned away. Google caps unverified apps at 100 users, so keep this below that. |
 | `simple.limit` | `unsafe.bindings` | `120` per `60`s | Gmail calls one account may make in that window, across all of its sessions. Cloudflare keeps this count per location, so an account connecting from two regions gets roughly that many in each. A wide read spends several: `search_messages` returning 50 makes 51 calls. |
 
+On the Workers **Free** plan a further ceiling applies: 50 outbound requests per invocation. A wide read spends one per message, so `search_messages` and `list_drafts` want `maxResults` at 45 or below there; above it the surplus comes back as per-message errors rather than results. The paid plan allows 1000.
+
 Raise either and redeploy. Cloudflare's rate limiter reads its ceiling from the
 binding at build time, so `simple.limit` is the only place that changes it. A
 single-user deployment can leave both alone — normal assistant use sits far

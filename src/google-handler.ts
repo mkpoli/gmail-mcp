@@ -287,8 +287,6 @@ app.get("/callback", async (c) => {
 				);
 			}
 		}
-		await c.env.OAUTH_KV.put(marker, new Date().toISOString());
-
 		const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
 			metadata: {
 				label: user.email,
@@ -304,6 +302,11 @@ app.get("/callback", async (c) => {
 			scope: oauthReqInfo.scope,
 			userId: user.email,
 		});
+
+		// Recorded once the grant exists. Written before it, a sign-in that failed
+		// here would leave the account counted against the cap for ever without
+		// ever having connected.
+		await c.env.OAUTH_KV.put(marker, new Date().toISOString());
 
 		const headers = new Headers({ Location: redirectTo });
 		if (clearSessionCookie) {

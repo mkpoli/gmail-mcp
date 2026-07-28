@@ -238,6 +238,8 @@ Gmail本身用原生`fetch`直接调[REST API](https://developers.google.com/wor
 | `MAX_ACCOUNTS` | `vars` | `25` | 允许完成登录的Google账号总数。到上限后已连接的账号照常工作，新账号被拒。Google对未验证应用的上限是100个用户，这个数字要压在它下面。 |
 | `simple.limit` | `unsafe.bindings` | 每`60`秒`120`次 | 单个账号在这段时间里可以发起的Gmail调用次数，按该账号的全部会话合计。Cloudflare按接入点分别计数，所以从多个地区连接时，每个接入点各有这么多。范围大的读取一次要花掉好几次：`search_messages`取50条就是51次调用。 |
 
+Workers的**Free**方案还有一条上限：单次执行最多50个对外请求。范围大的读取每封信要花一个，所以在Free上`search_messages`和`list_drafts`的`maxResults`要压到45以内，超出的部分会以每封信的错误返回而不是结果。付费方案的上限是1000。
+
 调高任意一个之后重新部署。Cloudflare的限流器在构建时从绑定里读上限，所以只有`simple.limit`能改变次数。单人使用的部署保持默认即可，正常助手用量离这两个上限还远。
 
 ---
