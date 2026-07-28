@@ -559,8 +559,20 @@ function htmlToText(html: string): string {
 
 // Walks the MIME tree and returns the first text/plain part, falling back to
 // text/html with tags stripped.
+// A part carrying a filename, or marked attachment by its disposition, is a
+// file the sender enclosed rather than the message they wrote. Reading one as
+// the body shows the wrong content and quotes it into replies and forwards,
+// and the order parts arrive in is the sender's to choose.
+function isBodyPart(part: any): boolean {
+	if (part.filename) return false;
+	const disposition = part?.headers?.find(
+		(h: any) => h?.name?.toLowerCase() === "content-disposition",
+	)?.value;
+	return !/^\s*attachment/i.test(disposition ?? "");
+}
+
 export function extractBody(payload: any): string {
-	const parts = flattenParts(payload);
+	const parts = flattenParts(payload).filter(isBodyPart);
 
 	const plain = parts.find((p) => p.mimeType === "text/plain" && p.body?.data);
 	if (plain) return decodePartData(plain);

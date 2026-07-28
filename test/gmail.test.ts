@@ -743,3 +743,51 @@ describe("replyRecipients", () => {
 		expect(cc).not.toContain(self);
 	});
 });
+
+describe("extractBody attachment handling", () => {
+	const b64 = (s: string) =>
+		btoa(String.fromCharCode(...new TextEncoder().encode(s)))
+			.replace(/\+/g, "-")
+			.replace(/\//g, "_")
+			.replace(/=+$/, "");
+
+	// A text file enclosed with the message is not the message. Reading it as
+	// the body would show the wrong content and quote it into replies.
+	test("skips a text/plain attachment in favour of the real body", () => {
+		expect(
+			extractBody({
+				mimeType: "multipart/mixed",
+				parts: [
+					{
+						mimeType: "text/plain",
+						filename: "instructions.txt",
+						body: { data: b64("ATTACHMENT-CONTENT") },
+					},
+					{ mimeType: "text/plain", body: { data: b64("REAL-BODY") } },
+				],
+			}),
+		).toBe("REAL-BODY");
+	});
+
+	test("skips a part marked as an attachment by its disposition", () => {
+		expect(
+			extractBody({
+				mimeType: "multipart/mixed",
+				parts: [
+					{
+						mimeType: "text/plain",
+						headers: [{ name: "Content-Disposition", value: 'attachment; filename="a.txt"' }],
+						body: { data: b64("ATTACHMENT-CONTENT") },
+					},
+					{ mimeType: "text/plain", body: { data: b64("REAL-BODY") } },
+				],
+			}),
+		).toBe("REAL-BODY");
+	});
+
+	test("still reads a lone body part that has no filename", () => {
+		expect(extractBody({ mimeType: "text/plain", body: { data: b64("just the body") } })).toBe(
+			"just the body",
+		);
+	});
+});
