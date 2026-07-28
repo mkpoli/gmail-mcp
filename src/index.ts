@@ -1172,8 +1172,19 @@ const BOUNDED_ENDPOINTS = new Set(["/token", "/register"]);
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		if (request.method !== "POST" || !BOUNDED_ENDPOINTS.has(new URL(request.url).pathname)) {
+		const path = new URL(request.url).pathname;
+		if (request.method !== "POST" || !BOUNDED_ENDPOINTS.has(path)) {
 			return provider.fetch(request, env, ctx);
+		}
+		// Registration needs no credentials and spends a KV write, which is the
+		// scarce thing here: enough of them and the grants and tokens of everyone
+		// already connected have nowhere to go.
+		if (path === "/register" && env.REGISTER_LIMITER) {
+			const caller = request.headers.get("cf-connecting-ip") ?? "unknown";
+			const { success } = await env.REGISTER_LIMITER.limit({ key: caller });
+			if (!success) {
+				return new Response("Too many registration requests", { status: 429 });
+			}
 		}
 		let body: Uint8Array;
 		try {

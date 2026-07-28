@@ -43,6 +43,15 @@
 				// so this is where the ceiling is set. The namespace is private to
 				// this Worker: another one sharing the number would share the counters.
 				"simple": { "limit": 120, "period": 60 }
+			},
+			{
+				"name": "REGISTER_LIMITER",
+				"type": "ratelimit",
+				"namespace_id": "4208",
+				// Client registration is open to anyone with the URL and writes a
+				// KV entry each time. A client registers once and then keeps its
+				// id, so a caller asking this often is not one.
+				"simple": { "limit": 10, "period": 60 }
 			}
 		]
 	},

@@ -596,6 +596,33 @@ describe("the public OAuth endpoints", () => {
 		return { request, offered: () => pulled };
 	};
 
+	// A client registers once and keeps its id, so a caller asking repeatedly is
+	// spending a KV write that the grants and tokens of connected accounts need.
+	test("turns away a caller registering over and over", async () => {
+		const asked: string[] = [];
+		const env = {
+			REGISTER_LIMITER: {
+				limit: async ({ key }: { key: string }) => {
+					asked.push(key);
+					return { success: asked.length <= 1 };
+				},
+			},
+		};
+		const register = () =>
+			worker.fetch(
+				new Request("https://example.com/register", {
+					method: "POST",
+					headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.9" },
+					body: "{}",
+				}),
+				env as never,
+				{} as never,
+			);
+		expect((await register()).status).not.toBe(429);
+		expect((await register()).status).toBe(429);
+		expect(asked).toEqual(["203.0.113.9", "203.0.113.9"]);
+	});
+
 	for (const path of ["/token", "/register"]) {
 		test(`stops reading a body too large to hold at ${path}`, async () => {
 			const { request, offered } = streamed(path, 512);

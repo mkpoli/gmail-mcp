@@ -13,7 +13,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#what-it-can-do)
-[![tests](https://img.shields.io/badge/tests-196_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
+[![tests](https://img.shields.io/badge/tests-197_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
 
 *[日本語版](./README.ja.md) · [简体中文](./README.zh.md)*
 
@@ -248,12 +248,14 @@ Two ceilings keep a shared deployment from being drained, both set in `wrangler.
 | Setting | Where | Default | What it bounds |
 | :-- | :-- | :-- | :-- |
 | `MAX_ACCOUNTS` | `vars` | `25` | Roughly how many distinct Google accounts may ever complete sign-in. Accounts already connected keep working when the cap is reached; new ones are turned away. Sign-ins arriving together each read the count before any of them is recorded, so the total can settle a little above this number. Google caps unverified apps at 100 users, so leave room below that. |
-| `simple.limit` | `unsafe.bindings` | `120` per `60`s | Gmail calls one account may make in that window, across all of its sessions. Cloudflare keeps this count per location, so an account connecting from two regions gets roughly that many in each. A wide read spends several: `search_messages` returning 50 makes 51 calls. |
+| `RATE_LIMITER.simple.limit` | `unsafe.bindings` | `120` per `60`s | Gmail calls one account may make in that window, across all of its sessions. Cloudflare keeps this count per location, so an account connecting from two regions gets roughly that many in each. A wide read spends several: `search_messages` returning 50 makes 51 calls. |
+| `REGISTER_LIMITER.simple.limit` | `unsafe.bindings` | `10` per `60`s | Client registrations one address may make in that window. A client registers once and keeps the id it is given, so ordinary use never approaches this; the ceiling is there because registration needs no credentials and each one writes to KV. |
 
 On the Workers **Free** plan a further ceiling applies: 50 outbound requests per invocation. A wide read spends one per message, so `search_messages` and `list_drafts` want `maxResults` at 45 or below there; above it the surplus comes back as per-message errors rather than results. The paid plan allows 1000.
 
 Raise either and redeploy. Cloudflare's rate limiter reads its ceiling from the
-binding at build time, so `simple.limit` is the only place that changes it. A
+binding at build time, so the `simple.limit` on each is the only place that
+changes it. A
 single-user deployment can leave both alone — normal assistant use sits far
 below them.
 
@@ -275,7 +277,7 @@ The Worker decrypts mail in memory while serving a request, as any hosted relay 
 
 ## How it was tested
 
-196 unit tests cover message construction (MIME nesting, RFC 2047 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, the CSRF and state-binding checks that guard the browser side of sign-in, and the tools themselves against a stand-in Gmail — session ownership, recipient composition, attachment selection, and what a partly-failed read returns.
+197 unit tests cover message construction (MIME nesting, RFC 2047 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, the CSRF and state-binding checks that guard the browser side of sign-in, and the tools themselves against a stand-in Gmail — session ownership, recipient composition, attachment selection, and what a partly-failed read returns.
 
 Beyond that, every tool has run against real Gmail accounts, with a separate account checking what arrived:
 
@@ -295,7 +297,7 @@ Beyond that, every tool has run against real Gmail accounts, with a separate acc
 ```sh
 bun run dev     # wrangler dev on :8788
 bun run check   # biome + tsc
-bun test        # 196 unit tests
+bun test        # 197 unit tests
 bun run assets  # regenerate the light and dark diagrams
 bun run deploy
 ```

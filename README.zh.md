@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#能做什么)
-[![tests](https://img.shields.io/badge/tests-196_passing-success?logo=bun&logoColor=white)](#测试)
+[![tests](https://img.shields.io/badge/tests-197_passing-success?logo=bun&logoColor=white)](#测试)
 
 *[English README](./README.md) · [日本語版](./README.ja.md)*
 
@@ -236,11 +236,12 @@ Gmail本身用原生`fetch`直接调[REST API](https://developers.google.com/wor
 | 设置 | 位置 | 默认值 | 限制的对象 |
 | :-- | :-- | :-- | :-- |
 | `MAX_ACCOUNTS` | `vars` | `25` | 允许完成登录的Google账号大致总数。到上限后已连接的账号照常工作，新账号被拒。同时到达的登录都在计数写入前读到旧值，所以总数可能略微超过这个数字。Google对未验证应用的上限是100个用户，要留出余量。 |
-| `simple.limit` | `unsafe.bindings` | 每`60`秒`120`次 | 单个账号在这段时间里可以发起的Gmail调用次数，按该账号的全部会话合计。Cloudflare按接入点分别计数，所以从多个地区连接时，每个接入点各有这么多。范围大的读取一次要花掉好几次：`search_messages`取50条就是51次调用。 |
+| `RATE_LIMITER.simple.limit` | `unsafe.bindings` | 每`60`秒`120`次 | 单个账号在这段时间里可以发起的Gmail调用次数，按该账号的全部会话合计。Cloudflare按接入点分别计数，所以从多个地区连接时，每个接入点各有这么多。范围大的读取一次要花掉好几次：`search_messages`取50条就是51次调用。 |
+| `REGISTER_LIMITER.simple.limit` | `unsafe.bindings` | 每`60`秒`10`次 | 单个地址在这段时间里可以发起的客户端注册次数。客户端注册一次就一直用拿到的ID，正常使用远达不到这个数；注册不需要凭据，每次都要写一条KV，所以要有上限。 |
 
 Workers的**Free**方案还有一条上限：单次执行最多50个对外请求。范围大的读取每封信要花一个，所以在Free上`search_messages`和`list_drafts`的`maxResults`要压到45以内，超出的部分会以每封信的错误返回而不是结果。付费方案的上限是1000。
 
-调高任意一个之后重新部署。Cloudflare的限流器在构建时从绑定里读上限，所以只有`simple.limit`能改变次数。单人使用的部署保持默认即可，正常助手用量离这两个上限还远。
+调高任意一个之后重新部署。Cloudflare的限流器在构建时从绑定里读上限，所以只有各绑定上的`simple.limit`能改变次数。单人使用的部署保持默认即可，正常助手用量离这两个上限还远。
 
 ---
 
@@ -260,7 +261,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 
 ## 测试
 
-196个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，登录流程里的CSRF和state校验，以及用一个替身Gmail跑通工具本身：会话归属判定、收件人组装、附件选择，还有读取部分失败时返回什么。
+197个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，登录流程里的CSRF和state校验，以及用一个替身Gmail跑通工具本身：会话归属判定、收件人组装、附件选择，还有读取部分失败时返回什么。
 
 另外，所有工具都在真实Gmail账号上跑过，再用另一个账号检查收到的东西：
 
@@ -280,7 +281,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 ```sh
 bun run dev     # wrangler dev，端口8788
 bun run check   # biome + tsc
-bun test        # 196个单元测试
+bun test        # 197个单元测试
 bun run assets  # 重新生成明暗两套图示
 bun run deploy
 ```

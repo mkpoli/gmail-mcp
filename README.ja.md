@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#-できること)
-[![tests](https://img.shields.io/badge/tests-196_passing-success?logo=bun&logoColor=white)](#-テスト)
+[![tests](https://img.shields.io/badge/tests-197_passing-success?logo=bun&logoColor=white)](#-テスト)
 
 *[English README](./README.md) · [简体中文](./README.zh.md)*
 
@@ -236,11 +236,12 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 | 設定 | 場所 | 既定値 | 制限する対象 |
 | :-- | :-- | :-- | :-- |
 | `MAX_ACCOUNTS` | `vars` | `25` | サインインを許可するGoogleアカウントのおおよその総数。上限に達しても接続済みのアカウントはそのまま使えて、新規のサインインだけを断ります。同時に来たサインインはどれも記録前の数を読むので、合計がこの数を少し超えることがあります。Googleは審査前のアプリを100ユーザーに制限しているので、余裕を持たせてください。 |
-| `simple.limit` | `unsafe.bindings` | `60`秒あたり`120` | 1アカウントがその時間内にGmail APIを呼び出せる回数で、セッションをまたいで合算します。Cloudflareはこれを拠点ごとに数えるため、複数の地域から接続すると拠点ごとにこの回数まで通ります。範囲の広い読み取りは何回分も使い、`search_messages`で50件取ると51回になります。 |
+| `RATE_LIMITER.simple.limit` | `unsafe.bindings` | `60`秒あたり`120` | 1アカウントがその時間内にGmail APIを呼び出せる回数で、セッションをまたいで合算します。Cloudflareはこれを拠点ごとに数えるため、複数の地域から接続すると拠点ごとにこの回数まで通ります。範囲の広い読み取りは何回分も使い、`search_messages`で50件取ると51回になります。 |
+| `REGISTER_LIMITER.simple.limit` | `unsafe.bindings` | `60`秒あたり`10` | 1つのアドレスがその時間内にクライアント登録を行える回数です。クライアントは一度登録すれば受け取ったIDを使い続けるので、通常の利用でこの回数に届くことはありません。登録は資格情報を必要とせず、1件ごとにKVへ書き込むため、上限を設けています。 |
 
 Workersの**Free**プランには、1回の実行で外部へ送れるリクエストが50件までという上限もあります。範囲の広い読み取りは1通につき1件使うので、`search_messages`と`list_drafts`の`maxResults`は45以下にしてください。超えた分は結果ではなくメッセージごとのエラーとして返ります。有料プランの上限は1000件です。
 
-変更したあとは再デプロイしてください。Cloudflareのレートリミッターはビルド時にバインディングから上限を読むので、回数を変えられるのは`simple.limit`だけです。個人で使う場合は、既定値のままで問題ありません。
+変更したあとは再デプロイしてください。Cloudflareのレートリミッターはビルド時にバインディングから上限を読むので、回数を変えられるのは各バインディングの`simple.limit`だけです。個人で使う場合は、既定値のままで問題ありません。
 
 ---
 
@@ -260,7 +261,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 
 ## ✅ テスト
 
-196件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定、サインイン時のCSRFとstateの照合に加えて、Gmailの代役を立ててツール自体の動作も確かめています。セッションの所有者判定、宛先の組み立て、添付ファイルの選択、一部が失敗した読み取りの返し方まで含みます。
+197件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定、サインイン時のCSRFとstateの照合に加えて、Gmailの代役を立ててツール自体の動作も確かめています。セッションの所有者判定、宛先の組み立て、添付ファイルの選択、一部が失敗した読み取りの返し方まで含みます。
 
 実際のGmailアカウントの間でも、すべてのツールの動作を確認しました。
 
@@ -280,7 +281,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 ```sh
 bun run dev     # wrangler dev、:8788
 bun run check   # biome + tsc
-bun test        # 単体テスト196件
+bun test        # 単体テスト197件
 bun run assets  # ライト・ダークの図を再生成
 bun run deploy
 ```
