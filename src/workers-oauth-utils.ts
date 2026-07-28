@@ -1,5 +1,6 @@
-// workers-oauth-utils.ts
-// OAuth utility functions with CSRF and state validation security fixes
+// The browser-facing half of the Google sign-in flow: the approval dialog and
+// its CSRF token, the signed cookie that remembers an approved client, and the
+// one-time OAuth state bound to the browser session that began the flow.
 
 import type { AuthRequest, ClientInfo } from "@cloudflare/workers-oauth-provider";
 
