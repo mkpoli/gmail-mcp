@@ -1204,3 +1204,29 @@ describe("encodedSize", () => {
 		expect(encodedSize(0)).toBe(0);
 	});
 });
+
+describe("entities a sender controls", () => {
+	const b64url = (s: string) =>
+		btoa(String.fromCharCode(...new TextEncoder().encode(s)))
+			.replace(/\+/g, "-")
+			.replace(/\//g, "_")
+			.replace(/=+$/, "");
+	const html = (body: string) =>
+		extractBody({ mimeType: "text/html", body: { data: b64url(body) } });
+
+	// A code point past the Unicode range, or inside the surrogate block, is not
+	// a character. Handing one to fromCodePoint throws, and mail body content is
+	// written by whoever sent it.
+	test.each([
+		["above the range", "&#1114112;"],
+		["hex above the range", "&#x110000;"],
+		["a lone surrogate", "&#55296;"],
+		["absurdly large", "&#99999999999;"],
+	])("survives %s", (_name, entity) => {
+		expect(() => html(`<p>a${entity}b</p>`)).not.toThrow();
+	});
+
+	test("still decodes the ones that are characters", () => {
+		expect(html("<p>&#65;&#x42;&pound;</p>")).toBe("AB£");
+	});
+});

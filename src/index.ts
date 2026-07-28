@@ -752,9 +752,11 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 									"this message carries more attachment data than can be forwarded; forward it from a mail client",
 								);
 							}
-							const blob = await this.api<AttachmentBody>(
-								`/messages/${encodeURIComponent(original.id ?? "")}/attachments/${encodeURIComponent(a.attachmentId)}`,
-							);
+							const blob = a.data
+								? { data: a.data }
+								: await this.api<AttachmentBody>(
+										`/messages/${encodeURIComponent(original.id ?? "")}/attachments/${encodeURIComponent(a.attachmentId)}`,
+									);
 							return {
 								filename: a.filename,
 								contentType: a.mimeType,
@@ -860,10 +862,15 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					});
 				}
 
-				const att = await this.api<AttachmentBody>(
-					`/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.attachmentId)}`,
-				);
-				const data: string = att?.data ?? "";
+				// A part that arrived whole carries its own bytes; only an
+				// externalised one has to be fetched.
+				const data: string = part.data
+					? part.data
+					: ((
+							await this.api<AttachmentBody>(
+								`/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.attachmentId)}`,
+							)
+						)?.data ?? "");
 				const meta = { filename: part.filename, mimeType: part.mimeType, size: part.size };
 				if (textOnly) {
 					if (!part.mimeType?.startsWith("text/")) {
@@ -1005,22 +1012,27 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 }
 
 function collectAttachments(payload: GmailPart | undefined) {
-	// attachmentId is what get_attachment needs, so it belongs in every listing.
 	const out: {
 		filename: string;
 		mimeType: string;
 		size: number;
+		// Where the bytes are. Gmail externalises a large part and gives it an
+		// id to fetch; a small one arrives whole in the listing, with no id at
+		// all. Keeping only the first kind loses the second silently, and a
+		// forward then goes out without the file.
 		attachmentId: string;
+		data: string;
 		charset: string;
 	}[] = [];
 	const walk = (p: GmailPart | undefined) => {
 		if (!p) return;
-		if (p.filename && p.body?.attachmentId) {
+		if (p.filename && (p.body?.attachmentId || p.body?.data)) {
 			out.push({
 				filename: p.filename,
 				mimeType: p.mimeType ?? "application/octet-stream",
 				size: p.body.size ?? 0,
-				attachmentId: p.body.attachmentId,
+				attachmentId: p.body.attachmentId ?? "",
+				data: p.body.data ?? "",
 				// A text attachment declares its own encoding, and decoding
 				// ISO-2022-JP as UTF-8 returns replacement characters.
 				charset: partCharset(p),

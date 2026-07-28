@@ -770,14 +770,23 @@ const HTML_ENTITIES: Record<string, string> = {
 	divide: "÷",
 };
 
+// A numeric reference names a code point, and a sender may name one that is not
+// a character: past the Unicode range, or inside the surrogate block. Those are
+// left as written rather than thrown over.
+function codePoint(original: string, value: number): string {
+	if (!Number.isInteger(value) || value < 0 || value > 0x10ffff) return original;
+	if (value >= 0xd800 && value <= 0xdfff) return original;
+	return String.fromCodePoint(value);
+}
+
 function htmlToText(html: string): string {
 	return html
 		.replace(/<style[\s\S]*?<\/style>/gi, "")
 		.replace(/<script[\s\S]*?<\/script>/gi, "")
 		.replace(/<[^>]+>/g, " ")
-		.replace(/&#(\d+);/g, (_m, code: string) => String.fromCodePoint(Number(code)))
-		.replace(/&#[xX]([0-9a-fA-F]+);/g, (_m, hex: string) =>
-			String.fromCodePoint(Number.parseInt(hex, 16)),
+		.replace(/&#(\d+);/g, (match, code: string) => codePoint(match, Number(code)))
+		.replace(/&#[xX]([0-9a-fA-F]+);/g, (match, hex: string) =>
+			codePoint(match, Number.parseInt(hex, 16)),
 		)
 		.replace(
 			/&(nbsp|amp|lt|gt|quot|apos|pound|euro|yen|copy|reg|trade|mdash|ndash|hellip|laquo|raquo|lsquo|rsquo|ldquo|rdquo|middot|bull|deg|times|divide);/g,

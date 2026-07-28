@@ -381,3 +381,49 @@ describe("get_thread on a thread too large to read at once", () => {
 		expect(threadCall?.url).toContain("metadataHeaders=Subject");
 	});
 });
+
+describe("attachments that arrive whole", () => {
+	// Gmail externalises a large part and gives it an id; a small one comes back
+	// inside the message with no id. Listing only the first kind loses the
+	// second, and a forward then goes out without the file.
+	const inlineFile = message("m1", {
+		payload: {
+			mimeType: "multipart/mixed",
+			parts: [
+				{ mimeType: "text/plain", body: { data: b64url("body") } },
+				{
+					mimeType: "text/csv",
+					filename: "tiny.csv",
+					body: { size: 3, data: b64url("a,b") },
+				},
+			],
+		},
+	});
+
+	test("lists one that carries its own bytes", async () => {
+		const { handlers } = await boot();
+		serveGmail([[/\/messages\/m1\?format=full/, () => inlineFile]]);
+		const out = result(await tool(handlers, "get_message")({ messageId: "m1" }));
+		expect((out.attachments as { filename: string }[]).map((a) => a.filename)).toEqual([
+			"tiny.csv",
+		]);
+	});
+
+	test("returns it without asking Gmail a second time", async () => {
+		const { handlers } = await boot();
+		serveGmail([[/\/messages\/m1\?format=full/, () => inlineFile]]);
+		const out = result(
+			await tool(
+				handlers,
+				"get_attachment",
+			)({
+				messageId: "m1",
+				attachmentId: "",
+				filename: "tiny.csv",
+				textOnly: true,
+			}),
+		);
+		expect(out.text).toBe("a,b");
+		expect(requests.filter((r) => r.url.includes("/attachments/"))).toHaveLength(0);
+	});
+});
