@@ -562,7 +562,15 @@ export function decodeAttachmentText(data: string, mimeType: string, charset: st
 
 export function truncate(text: string, limit: number): string {
 	if (text.length <= limit) return text;
-	return `${text.slice(0, limit)}\n[truncated: ${text.length - limit} of ${text.length} characters omitted]`;
+	// An emoji or other astral character occupies two code units, so a cut at
+	// the limit can land between them and leave a lone surrogate. That survives
+	// JSON but not UTF-8, and a truncated body is also what a reply quotes back
+	// into outgoing mail, so the cut retreats to the start of the character.
+	const high = text.charCodeAt(limit - 1);
+	const low = text.charCodeAt(limit);
+	const splitsPair = high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff;
+	const end = splitsPair ? limit - 1 : limit;
+	return `${text.slice(0, end)}\n[truncated: ${text.length - end} of ${text.length} characters omitted]`;
 }
 
 export function summarizeMessage(m: any) {

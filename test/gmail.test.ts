@@ -425,6 +425,23 @@ describe("textPartAttachment / decodeAttachmentText / truncate", () => {
 		expect(cut).toContain("a".repeat(100));
 		expect(cut).toContain("[truncated: 50 of 150 characters omitted]");
 	});
+
+	// A cut that lands between the two halves of an astral character leaves a
+	// lone surrogate, which survives JSON but not UTF-8 encoding — and a quoted
+	// body goes on to be sent as mail.
+	test("truncate never splits a surrogate pair", () => {
+		const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+		const text = `${"あ".repeat(3)}👍${"b".repeat(10)}`;
+		for (let limit = 1; limit < text.length; limit++) {
+			expect(truncate(text, limit)).not.toMatch(lone);
+		}
+	});
+
+	test("truncate reports the number of characters it actually dropped", () => {
+		const text = `${"あ".repeat(3)}👍${"b".repeat(10)}`;
+		// The limit falls inside the emoji, so the cut retreats to before it.
+		expect(truncate(text, 4)).toBe(`${"あ".repeat(3)}\n[truncated: 12 of 15 characters omitted]`);
+	});
 });
 
 describe("reply helpers", () => {
