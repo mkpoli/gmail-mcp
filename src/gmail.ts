@@ -118,7 +118,7 @@ function splitAddressList(value: string): string[] {
 
 // Display names carry arbitrary text, so a non-ASCII one needs RFC 2047 just
 // as a subject does; the address itself must stay untouched.
-export function encodeAddressList(value: string): string {
+function encodeAddressList(value: string): string {
 	return splitAddressList(value)
 		.map((address) => {
 			const match = address.match(/^(.*?)\s*<([^>]*)>$/);
