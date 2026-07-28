@@ -412,6 +412,70 @@ describe("get_attachment", () => {
 	});
 });
 
+describe("two attachments that both arrived whole", () => {
+	// Gmail gives an id only to a part it externalises, so parts that arrive
+	// whole have none and are all published with the same empty one. Matching on
+	// that would pick whichever came first and skip the check that refuses to
+	// guess.
+	const twoSmall = message("m1", {
+		payload: {
+			mimeType: "multipart/mixed",
+			parts: [
+				{ mimeType: "text/plain", body: { data: b64url("body") } },
+				{ mimeType: "text/csv", filename: "first.csv", body: { size: 7, data: b64url("FIRST,1") } },
+				{
+					mimeType: "text/csv",
+					filename: "second.csv",
+					body: { size: 8, data: b64url("SECOND,2") },
+				},
+			],
+		},
+	});
+
+	test("returns the one asked for by name", async () => {
+		const { handlers } = await boot();
+		serveGmail([[/\/messages\/m1\?format=full/, () => twoSmall]]);
+		const out = result(
+			await tool(
+				handlers,
+				"get_attachment",
+			)({
+				messageId: "m1",
+				attachmentId: "",
+				filename: "second.csv",
+				textOnly: true,
+			}),
+		);
+		expect(out.filename).toBe("second.csv");
+		expect(out.text).toBe("SECOND,2");
+	});
+
+	test("refuses to choose between two of the same name", async () => {
+		const { handlers } = await boot();
+		const sameName = message("m1", {
+			payload: {
+				mimeType: "multipart/mixed",
+				parts: [
+					{ mimeType: "text/csv", filename: "a.csv", body: { size: 2, data: b64url("A1") } },
+					{ mimeType: "text/csv", filename: "a.csv", body: { size: 2, data: b64url("A2") } },
+				],
+			},
+		});
+		serveGmail([[/\/messages\/m1\?format=full/, () => sameName]]);
+		await expect(
+			tool(
+				handlers,
+				"get_attachment",
+			)({
+				messageId: "m1",
+				attachmentId: "",
+				filename: "a.csv",
+				textOnly: true,
+			}),
+		).rejects.toThrow(/cannot be told apart/);
+	});
+});
+
 describe("get_thread", () => {
 	test("keeps the newest messages and says how many it dropped", async () => {
 		const { handlers } = await boot();

@@ -890,7 +890,10 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				// does stay put.
 				// The id is tried first: when it still matches there is nothing to be
 				// ambiguous about, whatever names the other parts carry.
-				const byId = parts.find((a) => a.attachmentId === attachmentId);
+				// A part that arrived whole has no id of its own, and every one of
+				// them is published with the same empty string. Matching on that
+				// would answer with whichever came first and skip the check below.
+				const byId = attachmentId ? parts.find((a) => a.attachmentId === attachmentId) : undefined;
 				const named = filename ? parts.filter((a) => a.filename === filename) : [];
 				if (!byId && named.length > 1) {
 					throw new Error(
