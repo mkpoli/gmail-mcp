@@ -327,6 +327,12 @@ export async function validateOAuthState(
 		throw new OAuthError("invalid_request", "Invalid or expired state", 400);
 	}
 
+	// Spent as soon as it is read, before the checks below. Two callbacks racing
+	// the same state would otherwise both read it and both proceed; deleting
+	// here leaves only the gap between this read and this write. A state that
+	// fails a check further down stays spent, which is what one-time means.
+	await kv.delete(`oauth:state:${stateFromQuery}`);
+
 	// SECURITY FIX: Validate that this state token belongs to this browser session
 	// by checking that the state hash matches the session cookie
 	const cookieHeader = request.headers.get("Cookie") || "";
@@ -365,9 +371,6 @@ export async function validateOAuthState(
 	} catch (_e) {
 		throw new OAuthError("server_error", "Invalid state data", 500);
 	}
-
-	// Delete state from KV (one-time use)
-	await kv.delete(`oauth:state:${stateFromQuery}`);
 
 	// Clear the session binding cookie (one-time use per OAuth flow)
 	const clearCookie = `${consentedStateCookieName}=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0`;
