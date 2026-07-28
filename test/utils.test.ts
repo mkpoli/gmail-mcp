@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
-	globalThis.fetch = (async (input: any, init?: RequestInit) =>
+	globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
 		handler(String(input), init)) as typeof fetch;
 }
 

@@ -35,6 +35,17 @@
 
 		/* Enable all strict type-checking options. */
 		"strict": true,
+		/* An index or map lookup can miss, and the type should say so. */
+		"noUncheckedIndexedAccess": true,
+		/* An absent property and one explicitly set to undefined differ. */
+		"exactOptionalPropertyTypes": true,
+		/* Overriding a base member has to be declared. */
+		"noImplicitOverride": true,
+		/* A switch case that falls through is nearly always a mistake. */
+		"noFallthroughCasesInSwitch": true,
+		/* Dead bindings are a defect waiting to be read as intent. */
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
 
 		/* Skip type checking all .d.ts files. */
 		"skipLibCheck": true

@@ -409,8 +409,7 @@ export async function addApprovedClient(
 	const approvedClientsCookieName = "__Host-APPROVED_CLIENTS";
 	const THIRTY_DAYS_IN_SECONDS = 2592000;
 
-	const existingApprovedClients =
-		(await getApprovedClientsFromCookie(request, cookieSecret)) || [];
+	const existingApprovedClients = (await getApprovedClientsFromCookie(request, cookieSecret)) || [];
 	const updatedApprovedClients = Array.from(new Set([...existingApprovedClients, clientId]));
 
 	const payload = JSON.stringify(updatedApprovedClients);
@@ -443,7 +442,7 @@ export interface ApprovalDialogOptions {
 	 * Arbitrary state data to pass through the approval flow
 	 * Will be encoded in the form and returned when approval is complete
 	 */
-	state: Record<string, any>;
+	state: Record<string, unknown>;
 	/**
 	 * CSRF token to include in the form
 	 */
@@ -479,9 +478,7 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
 	const tosUri = client?.tosUri ? sanitizeText(sanitizeUrl(client.tosUri)) : "";
 
 	const contacts =
-		client?.contacts && client.contacts.length > 0
-			? sanitizeText(client.contacts.join(", "))
-			: "";
+		client?.contacts && client.contacts.length > 0 ? sanitizeText(client.contacts.join(", ")) : "";
 
 	const redirectUris =
 		client?.redirectUris && client.redirectUris.length > 0
@@ -696,8 +693,8 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
               </div>
 
               ${
-					clientUri
-						? `
+								clientUri
+									? `
                 <div class="client-detail">
                   <div class="detail-label">Website:</div>
                   <div class="detail-value small">
@@ -707,12 +704,12 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-						: ""
-				}
+									: ""
+							}
 
               ${
-					policyUri
-						? `
+								policyUri
+									? `
                 <div class="client-detail">
                   <div class="detail-label">Privacy Policy:</div>
                   <div class="detail-value">
@@ -722,12 +719,12 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-						: ""
-				}
+									: ""
+							}
 
               ${
-					tosUri
-						? `
+								tosUri
+									? `
                 <div class="client-detail">
                   <div class="detail-label">Terms of Service:</div>
                   <div class="detail-value">
@@ -737,12 +734,12 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-						: ""
-				}
+									: ""
+							}
 
               ${
-					redirectUris.length > 0
-						? `
+								redirectUris.length > 0
+									? `
                 <div class="client-detail">
                   <div class="detail-label">Redirect URIs:</div>
                   <div class="detail-value small">
@@ -750,19 +747,19 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-						: ""
-				}
+									: ""
+							}
 
               ${
-					contacts
-						? `
+								contacts
+									? `
                 <div class="client-detail">
                   <div class="detail-label">Contact:</div>
                   <div class="detail-value">${contacts}</div>
                 </div>
               `
-						: ""
-				}
+									: ""
+							}
             </div>
 
             <p>This MCP Client is requesting to be authorized on ${serverName}. If you approve, you will be redirected to complete authentication.</p>
@@ -813,7 +810,8 @@ async function getApprovedClientsFromCookie(
 
 	if (parts.length !== 2) return null;
 
-	const [signatureHex, base64Payload] = parts;
+	const signatureHex = parts[0] ?? "";
+	const base64Payload = parts[1] ?? "";
 
 	// The payload is decoded before its signature is checked, so it is still
 	// arbitrary input at this point: a value that is not base64 makes atob
@@ -861,7 +859,7 @@ async function verifySignature(
 	const enc = new TextEncoder();
 	try {
 		const signatureBytes = new Uint8Array(
-			signatureHex.match(/.{1,2}/g)!.map((byte) => Number.parseInt(byte, 16)),
+			(signatureHex.match(/.{1,2}/g) ?? []).map((byte) => Number.parseInt(byte, 16)),
 		);
 		return await crypto.subtle.verify("HMAC", key, signatureBytes.buffer, enc.encode(data));
 	} catch (_e) {

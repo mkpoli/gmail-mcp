@@ -11,6 +11,7 @@ import {
 	forwardHtmlBlock,
 	forwardSubject,
 	GmailApiError,
+	type GmailPart,
 	gmailFetch,
 	headerValue,
 	normalizeMessageId,
@@ -58,7 +59,7 @@ describe("buildRfc822", () => {
 		expect(lines).toContain("To: a@example.com");
 		expect(lines).toContain("Subject: Hi");
 		expect(lines).toContain("MIME-Version: 1.0");
-		const body = lines[lines.length - 1];
+		const body = lines[lines.length - 1] ?? "";
 		expect(atob(body)).toBe("line1\nline2");
 	});
 
@@ -121,7 +122,7 @@ describe("buildRfc822", () => {
 	test("handles bodies past the fromCharCode argument limit", () => {
 		const body = "長い本文の一行\n".repeat(20_000);
 		const raw = buildRfc822({ to: "a@example.com", subject: "big", body });
-		const encoded = raw.split("\r\n\r\n")[1].replace(/\r\n/g, "");
+		const encoded = (raw.split("\r\n\r\n")[1] ?? "").replace(/\r\n/g, "");
 		expect(b64urlDecode(encoded.replace(/\+/g, "-").replace(/\//g, "_"))).toBe(body);
 	});
 
@@ -137,11 +138,11 @@ describe("buildRfc822", () => {
 		expect(raw).toContain(`Content-Type: multipart/alternative; boundary="${boundary}"`);
 		const parts = raw.split(`--${boundary}`);
 		expect(parts.length).toBe(4);
-		expect(parts[1]).toContain('Content-Type: text/plain; charset="UTF-8"');
-		expect(atob(parts[1].trim().split("\r\n").pop() ?? "")).toBe("plain version");
-		expect(parts[2]).toContain('Content-Type: text/html; charset="UTF-8"');
-		expect(atob(parts[2].trim().split("\r\n").pop() ?? "")).toBe("<h1>rich version</h1>");
-		expect(parts[3].trim()).toBe("--");
+		expect(parts[1] ?? "").toContain('Content-Type: text/plain; charset="UTF-8"');
+		expect(atob((parts[1] ?? "").trim().split("\r\n").pop() ?? "")).toBe("plain version");
+		expect(parts[2] ?? "").toContain('Content-Type: text/html; charset="UTF-8"');
+		expect(atob((parts[2] ?? "").trim().split("\r\n").pop() ?? "")).toBe("<h1>rich version</h1>");
+		expect((parts[3] ?? "").trim()).toBe("--");
 	});
 
 	test("nests mixed > related > alternative for attachments plus inline images", () => {
@@ -264,7 +265,7 @@ describe("buildRfc822", () => {
 		const raw = buildRfc822({ to: "a@example.com", subject: "日本語".repeat(40), body: "b" });
 		const lines = raw.split("\r\n");
 		const start = lines.findIndex((l) => l.startsWith("Subject:"));
-		const words = [lines[start], ...lines.slice(start + 1).filter((l) => l.startsWith(" "))]
+		const words = [lines[start] ?? "", ...lines.slice(start + 1).filter((l) => l.startsWith(" "))]
 			.map((w) => w.trimStart().replace(/^Subject:\s*/, ""))
 			.filter(Boolean);
 		expect(words.length).toBeGreaterThan(1);
@@ -342,7 +343,7 @@ describe("buildRfc822", () => {
 
 	test("wraps encoded body lines at 76 characters", () => {
 		const raw = buildRfc822({ to: "a@example.com", subject: "s", body: "x".repeat(600) });
-		const bodyLines = raw.split("\r\n\r\n")[1].split("\r\n");
+		const bodyLines = (raw.split("\r\n\r\n")[1] ?? "").split("\r\n");
 		expect(bodyLines.length).toBeGreaterThan(1);
 		for (const line of bodyLines) {
 			expect(line.length).toBeLessThanOrEqual(76);
@@ -351,7 +352,7 @@ describe("buildRfc822", () => {
 });
 
 describe("extractBody", () => {
-	const part = (mimeType: string, text: string, parts?: any[]) => ({
+	const part = (mimeType: string, text: string, parts?: GmailPart[]) => ({
 		mimeType,
 		body: { data: b64urlEncode(text) },
 		parts,
@@ -631,8 +632,11 @@ describe("gmailFetch", () => {
 		globalThis.fetch = realFetch;
 	});
 
-	function stub(response: Response, seen: { url?: string; init?: RequestInit } = {}) {
-		globalThis.fetch = (async (url: any, init: any) => {
+	function stub(
+		response: Response,
+		seen: { url?: string | undefined; init?: RequestInit | undefined } = {},
+	) {
+		globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
 			seen.url = String(url);
 			seen.init = init;
 			return response;
@@ -988,6 +992,6 @@ describe("gmailFetch response ceiling", () => {
 	test("passes an ordinary response through", async () => {
 		globalThis.fetch = (async () =>
 			new Response(JSON.stringify({ ok: 1 }), { status: 200 })) as unknown as typeof fetch;
-		expect(await gmailFetch("tok", "/profile")).toEqual({ ok: 1 });
+		expect(await gmailFetch<{ ok: number }>("tok", "/profile")).toEqual({ ok: 1 });
 	});
 });

@@ -180,7 +180,7 @@ app.post("/authorize", async (c) => {
 		headers.append("Set-Cookie", csrfClearCookie.clearCookie);
 
 		return redirectToGoogle(c.req.raw, stateToken, headers);
-	} catch (error: any) {
+	} catch (error: unknown) {
 		console.error("POST /authorize error:", error);
 		if (error instanceof OAuthError) {
 			return error.toResponse();
@@ -211,7 +211,7 @@ app.get("/callback", async (c) => {
 		const result = await validateOAuthState(c.req.raw, c.env.OAUTH_KV);
 		oauthReqInfo = result.oauthReqInfo;
 		clearSessionCookie = result.clearCookie;
-	} catch (error: any) {
+	} catch (error: unknown) {
 		if (error instanceof OAuthError) {
 			return error.toResponse();
 		}

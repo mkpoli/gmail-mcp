@@ -12,6 +12,8 @@ import {
 	forwardHtmlBlock,
 	forwardSubject,
 	GmailApiError,
+	type GmailMessage,
+	type GmailPart,
 	gmailFetch,
 	headerValue,
 	normalizeMessageId,
@@ -29,6 +31,21 @@ import { GoogleHandler } from "./google-handler";
 import { type Props, refreshGoogleToken } from "./utils";
 
 type TokenCache = { accessToken: string; expiresAt: number };
+
+// Gmail returns more than this server reads, and the shape differs by endpoint.
+// Responses are described where they are consumed rather than modelled whole.
+type GmailUnknown = Record<string, unknown>;
+
+// Named where a response is consumed, holding only the fields that are read.
+type MessageList = {
+	messages?: { id?: string }[];
+	resultSizeEstimate?: number;
+	nextPageToken?: string;
+};
+type LabelList = { labels?: { id?: string; name?: string; type?: string }[] };
+type DraftList = { drafts?: { id?: string }[] };
+type DraftResult = { id?: string; message?: GmailMessage };
+type AttachmentBody = { size?: number; data?: string };
 
 // Character budgets keep decoded mail bodies from flooding Durable Object
 // memory or the MCP client's context window.
@@ -164,7 +181,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		}
 	}
 
-	private async api(path: string, init: RequestInit = {}): Promise<any> {
+	private async api<T = GmailUnknown>(path: string, init: RequestInit = {}): Promise<T> {
 		await this.assertSessionOwner();
 		await this.assertWithinRate();
 		try {
@@ -199,7 +216,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
 			while (next < items.length) {
 				const i = next++;
-				out[i] = await fn(items[i]);
+				const item = items[i];
+				if (item === undefined) continue;
+				out[i] = await fn(item);
 			}
 		});
 		await Promise.all(workers);
@@ -208,7 +227,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 	// Inline part data first; when Gmail externalizes a large text part as an
 	// attachment, fetch and decode those bytes.
-	private async messageBody(m: any): Promise<string> {
+	private async messageBody(m: GmailMessage): Promise<string> {
 		const inline = extractBody(m.payload);
 		if (inline) return inline;
 		const ref = textPartAttachment(m.payload);
@@ -219,8 +238,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		if (ref.size > ATTACHMENT_BYTE_LIMIT) {
 			return `[body is ${ref.size} bytes, past the ${ATTACHMENT_BYTE_LIMIT}-byte limit; read it with get_attachment]`;
 		}
-		const att = await this.api(
-			`/messages/${encodeURIComponent(m.id)}/attachments/${encodeURIComponent(ref.attachmentId)}`,
+		const att = await this.api<AttachmentBody>(
+			`/messages/${encodeURIComponent(m.id ?? "")}/attachments/${encodeURIComponent(ref.attachmentId)}`,
 		);
 		if (!att?.data) return "";
 		return decodeAttachmentText(att.data, ref.mimeType, ref.charset);
@@ -233,7 +252,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	private async threadHeaderFor(inReplyTo: string): Promise<string> {
 		const direct = normalizeMessageId(inReplyTo);
 		if (direct) return direct;
-		const m = await this.api(
+		const m = await this.api<GmailMessage & { name?: string; messages?: GmailMessage[] }>(
 			`/messages/${encodeURIComponent(inReplyTo)}?format=metadata&metadataHeaders=Message-ID`,
 		);
 		const resolved = headerValue(m, "Message-ID");
@@ -273,10 +292,10 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			async ({ query, maxResults, pageToken }) => {
 				const params = new URLSearchParams({ q: query, maxResults: String(maxResults) });
 				if (pageToken) params.set("pageToken", pageToken);
-				const list = await this.api(`/messages?${params}`);
-				const ids: string[] = (list.messages ?? []).map((m: any) => m.id);
+				const list = await this.api<MessageList>(`/messages?${params}`);
+				const ids = (list.messages ?? []).map((m) => m.id ?? "").filter(Boolean);
 				const messages = await this.mapLimited(ids, 8, (id) =>
-					this.api(
+					this.api<GmailMessage>(
 						`/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date`,
 					),
 				);
@@ -293,7 +312,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			`Read a full message from ${account}, including decoded body text`,
 			{ messageId: z.string() },
 			async ({ messageId }) => {
-				const m = await this.api(`/messages/${encodeURIComponent(messageId)}?format=full`);
+				const m = await this.api<GmailMessage>(
+					`/messages/${encodeURIComponent(messageId)}?format=full`,
+				);
 				return this.text({
 					...summarizeMessage(m),
 					messageIdHeader: headerValue(m, "Message-ID"),
@@ -321,10 +342,10 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					.describe("Newest messages are kept when a thread exceeds this"),
 			},
 			async ({ threadId, includeBodies, maxMessages }) => {
-				const t = await this.api(
+				const t = await this.api<{ messages?: GmailMessage[] }>(
 					`/threads/${encodeURIComponent(threadId)}?format=${includeBodies ? "full" : "metadata"}`,
 				);
-				const all: any[] = t.messages ?? [];
+				const all: GmailMessage[] = t.messages ?? [];
 				const kept = all.slice(-maxMessages);
 				const omitted = all.length - kept.length;
 
@@ -340,7 +361,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				// message cannot crowd out the rest and the total stays bounded
 				// however many messages were requested.
 				const perMessage = Math.floor(THREAD_TOTAL_BUDGET / Math.max(kept.length, 1));
-				const messages = await this.mapLimited(kept, 4, async (m: any) => ({
+				const messages = await this.mapLimited(kept, 4, async (m) => ({
 					...summarizeMessage(m),
 					body: truncate(await this.messageBody(m), Math.min(perMessage, THREAD_BODY_LIMIT)),
 				}));
@@ -349,10 +370,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		);
 
 		this.server.tool("list_labels", `List labels in ${account}`, {}, async () => {
-			const l = await this.api("/labels");
-			return this.text(
-				(l.labels ?? []).map((x: any) => ({ id: x.id, name: x.name, type: x.type })),
-			);
+			const l = await this.api<LabelList>("/labels");
+			return this.text((l.labels ?? []).map((x) => ({ id: x.id, name: x.name, type: x.type })));
 		});
 
 		this.server.tool(
@@ -406,7 +425,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const raw = b64urlEncode(
 					buildRfc822({ to, cc, bcc, from, subject, body, htmlBody, attachments, inlineImages }),
 				);
-				const d = await this.api("/drafts", {
+				const d = await this.api<DraftResult>("/drafts", {
 					method: "POST",
 					body: JSON.stringify({ message: { raw } }),
 				});
@@ -433,7 +452,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const raw = b64urlEncode(
 					buildRfc822({ to, cc, bcc, from, subject, body, htmlBody, attachments, inlineImages }),
 				);
-				const d = await this.api(`/drafts/${encodeURIComponent(draftId)}`, {
+				const d = await this.api<DraftResult>(`/drafts/${encodeURIComponent(draftId)}`, {
 					method: "PUT",
 					body: JSON.stringify({ message: { raw } }),
 				});
@@ -470,12 +489,12 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			{ maxResults: z.number().int().min(1).max(50).default(10) },
 			async ({ maxResults }) => {
 				const l = await this.api(`/drafts?maxResults=${maxResults}`);
-				const drafts: any[] = l.drafts ?? [];
+				const drafts = (l as DraftList).drafts ?? [];
 				// The list response carries ids only, which say nothing about which
 				// draft is which; pull the headers that identify them.
-				const detailed = await this.mapLimited(drafts, 8, async (d: any) => {
-					const full = await this.api(
-						`/drafts/${encodeURIComponent(d.id)}?format=metadata&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date`,
+				const detailed = await this.mapLimited(drafts, 8, async (d) => {
+					const full = await this.api<{ message?: GmailMessage }>(
+						`/drafts/${encodeURIComponent(d.id ?? "")}?format=metadata&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject&metadataHeaders=Date`,
 					);
 					return {
 						draftId: d.id,
@@ -551,7 +570,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				inlineImages: z.array(inlineImageSchema).default([]),
 			},
 			async ({ messageId, body, htmlBody, attachments, inlineImages }) => {
-				const original = await this.api(`/messages/${encodeURIComponent(messageId)}?format=full`);
+				const original = await this.api<GmailMessage>(
+					`/messages/${encodeURIComponent(messageId)}?format=full`,
+				);
 				const self = account.toLowerCase();
 				const fromAddrs = parseAddresses(headerValue(original, "From"));
 				const toAddrs = parseAddresses(headerValue(original, "To"));
@@ -621,7 +642,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					.describe("Re-attach the original's files, within the attachment size budget"),
 			},
 			async ({ messageId, to, cc, body, htmlBody, includeAttachments }) => {
-				const original = await this.api(`/messages/${encodeURIComponent(messageId)}?format=full`);
+				const original = await this.api<GmailMessage>(
+					`/messages/${encodeURIComponent(messageId)}?format=full`,
+				);
 				const fields = {
 					from: headerValue(original, "From"),
 					date: headerValue(original, "Date"),
@@ -639,8 +662,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					.map((a) => a.filename);
 				const attachments = includeAttachments
 					? await this.mapLimited(carried, 4, async (a) => {
-							const blob = await this.api(
-								`/messages/${encodeURIComponent(original.id)}/attachments/${encodeURIComponent(a.attachmentId)}`,
+							const blob = await this.api<AttachmentBody>(
+								`/messages/${encodeURIComponent(original.id ?? "")}/attachments/${encodeURIComponent(a.attachmentId)}`,
 							);
 							return {
 								filename: a.filename,
@@ -696,7 +719,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			async ({ messageId, attachmentId, filename, textOnly }) => {
 				// The part's declared type decides whether decoding to text is
 				// meaningful; decoding a PDF as UTF-8 would return pages of noise.
-				const message = await this.api(`/messages/${encodeURIComponent(messageId)}?format=full`);
+				const message = await this.api<GmailMessage>(
+					`/messages/${encodeURIComponent(messageId)}?format=full`,
+				);
 				const parts = collectAttachments(message.payload);
 				// Gmail hands out a different attachment id every time a message is
 				// read, so the one a caller is holding came from an earlier read and
@@ -731,7 +756,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					});
 				}
 
-				const att = await this.api(
+				const att = await this.api<AttachmentBody>(
 					`/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.attachmentId)}`,
 				);
 				const data: string = att?.data ?? "";
@@ -773,10 +798,13 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				removeLabelIds: z.array(z.string()).default([]),
 			},
 			async ({ threadId, addLabelIds, removeLabelIds }) => {
-				const t = await this.api(`/threads/${encodeURIComponent(threadId)}/modify`, {
-					method: "POST",
-					body: JSON.stringify({ addLabelIds, removeLabelIds }),
-				});
+				const t = await this.api<{ id?: string; messages?: GmailMessage[] }>(
+					`/threads/${encodeURIComponent(threadId)}/modify`,
+					{
+						method: "POST",
+						body: JSON.stringify({ addLabelIds, removeLabelIds }),
+					},
+				);
 				return this.text({ id: t.id, messages: (t.messages ?? []).length });
 			},
 		);
@@ -864,7 +892,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	}
 }
 
-function collectAttachments(payload: any) {
+function collectAttachments(payload: GmailPart | undefined) {
 	// attachmentId is what get_attachment needs, so it belongs in every listing.
 	const out: {
 		filename: string;
@@ -873,13 +901,13 @@ function collectAttachments(payload: any) {
 		attachmentId: string;
 		charset: string;
 	}[] = [];
-	const walk = (p: any) => {
+	const walk = (p: GmailPart | undefined) => {
 		if (!p) return;
 		if (p.filename && p.body?.attachmentId) {
 			out.push({
 				filename: p.filename,
-				mimeType: p.mimeType,
-				size: p.body.size,
+				mimeType: p.mimeType ?? "application/octet-stream",
+				size: p.body.size ?? 0,
 				attachmentId: p.body.attachmentId,
 				// A text attachment declares its own encoding, and decoding
 				// ISO-2022-JP as UTF-8 returns replacement characters.
@@ -922,13 +950,17 @@ const mcpHandler = {
 	},
 };
 
+// The provider declares a handler as an ExportedHandler with a required fetch.
+// Both of these supply one; the declarations do not line up with a plain object.
+type ProviderHandler = { fetch: ExportedHandlerFetchHandler<unknown> };
+
 export default new OAuthProvider({
 	apiHandlers: {
-		"/mcp": mcpHandler as any,
+		"/mcp": mcpHandler as unknown as ProviderHandler,
 	},
 	authorizeEndpoint: "/authorize",
 	clientRegistrationEndpoint: "/register",
-	defaultHandler: GoogleHandler as any,
+	defaultHandler: GoogleHandler as unknown as ProviderHandler,
 	tokenEndpoint: "/token",
 	// Registration is open to any client, so the code exchange must carry real
 	// cryptographic proof: plain PKCE offers none.

@@ -33,7 +33,7 @@ function fakeKV() {
 }
 
 function cookieValue(setCookie: string): string {
-	return setCookie.split(";")[0];
+	return setCookie.split(";")[0] ?? "";
 }
 
 function request(url: string, cookie?: string): Request {

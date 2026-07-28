@@ -7,7 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["src/**", "test/**", "!src/workers-oauth-utils.ts"]
+		"includes": ["src/**", "test/**"]
 	},
 	"formatter": {
 		"enabled": true,
@@ -18,9 +18,13 @@
 		"enabled": true,
 		"rules": {
 			"preset": "recommended",
+			"correctness": { "noUndeclaredVariables": "error" },
 			"suspicious": {
-				"noExplicitAny": "off"
-			}
+				"noExplicitAny": "error",
+				"noConsole": { "level": "warn", "options": { "allow": ["error", "warn"] } }
+			},
+			"complexity": { "noExcessiveCognitiveComplexity": "warn" },
+			"style": { "useConst": "error", "noNonNullAssertion": "error" }
 		}
 	},
 	"javascript": {

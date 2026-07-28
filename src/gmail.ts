@@ -16,6 +16,30 @@ const MAX_HEADER_RUN = 900;
 // under what would exhaust a Worker isolate.
 const MAX_RESPONSE_BYTES = 24_000_000;
 
+// The parts of Gmail's message shape this server reads. Everything is optional
+// because the API omits fields by format and by message: a metadata read has no
+// body, an externalized part has no data, a malformed sender may send no name.
+export type GmailHeader = { name?: string | undefined; value?: string | undefined };
+export type GmailBody = {
+	size?: number | undefined;
+	data?: string | undefined;
+	attachmentId?: string | undefined;
+};
+export type GmailPart = {
+	mimeType?: string | undefined;
+	filename?: string | undefined;
+	headers?: GmailHeader[] | undefined;
+	body?: GmailBody | undefined;
+	parts?: GmailPart[] | undefined;
+};
+export type GmailMessage = {
+	id?: string | undefined;
+	threadId?: string | undefined;
+	labelIds?: string[] | undefined;
+	snippet?: string | undefined;
+	payload?: GmailPart | undefined;
+};
+
 export class GmailApiError extends Error {
 	constructor(
 		public status: number,
@@ -25,12 +49,12 @@ export class GmailApiError extends Error {
 	}
 }
 
-export async function gmailFetch(
+export async function gmailFetch<T = unknown>(
 	accessToken: string,
 	path: string,
 	init: RequestInit = {},
 	limit: number = MAX_RESPONSE_BYTES,
-): Promise<any> {
+): Promise<T> {
 	const resp = await fetch(`${BASE}${path}`, {
 		...init,
 		headers: {
@@ -42,14 +66,14 @@ export async function gmailFetch(
 	if (!resp.ok) {
 		throw new GmailApiError(resp.status, await resp.text());
 	}
-	if (resp.status === 204) return null;
+	if (resp.status === 204) return null as T;
 
 	// A whole-thread read returns every message's body, and parsing arrives
 	// before any of the character budgets can apply. Counting the bytes as they
 	// come turns a response that would exhaust the isolate into an error naming
 	// what to do instead.
 	const reader = resp.body?.getReader();
-	if (!reader) return null;
+	if (!reader) return null as T;
 	const chunks: Uint8Array[] = [];
 	let total = 0;
 	for (;;) {
@@ -71,7 +95,7 @@ export async function gmailFetch(
 		body.set(chunk, at);
 		at += chunk.byteLength;
 	}
-	return JSON.parse(new TextDecoder().decode(body));
+	return JSON.parse(new TextDecoder().decode(body)) as T;
 }
 
 // Chunked binary-to-base64: a spread into String.fromCharCode overflows the
@@ -144,7 +168,7 @@ function encodeHeader(value: string): string {
 	while (i < bytes.length) {
 		let take = Math.min(MAX_CHUNK, bytes.length - i);
 		// Never cut a multi-byte character: continuation bytes start with 10xxxxxx.
-		while (take > 1 && i + take < bytes.length && (bytes[i + take] & 0xc0) === 0x80) {
+		while (take > 1 && i + take < bytes.length && ((bytes[i + take] ?? 0) & 0xc0) === 0x80) {
 			take--;
 		}
 		words.push(`=?UTF-8?B?${bytesToB64(bytes.subarray(i, i + take))}?=`);
@@ -192,7 +216,8 @@ function encodeAddressList(value: string): string {
 		.map((address) => {
 			const match = address.match(/^(.*?)\s*<([^>]*)>$/);
 			if (!match) return address;
-			const [, rawName, addr] = match;
+			const rawName = match[1] ?? "";
+			const addr = match[2] ?? "";
 			const trimmed = rawName.trim();
 			// Unwrap a quoted display name back to its literal text, quoted-pairs
 			// included, so re-quoting below does not escape the escapes.
@@ -378,18 +403,18 @@ export function buildRfc822({
 	references,
 }: {
 	to: string;
-	cc?: string;
-	bcc?: string;
+	cc?: string | undefined;
+	bcc?: string | undefined;
 	// Send-as alias; must already be configured in the account, Gmail rejects
 	// or rewrites anything else.
-	from?: string;
+	from?: string | undefined;
 	subject: string;
 	body: string;
-	htmlBody?: string;
-	attachments?: FilePart[];
-	inlineImages?: InlineImage[];
-	inReplyTo?: string;
-	references?: string;
+	htmlBody?: string | undefined;
+	attachments?: FilePart[] | undefined;
+	inlineImages?: InlineImage[] | undefined;
+	inReplyTo?: string | undefined;
+	references?: string | undefined;
 }): string {
 	assertHeaderSafe("To", to);
 	if (cc) assertHeaderSafe("Cc", cc);
@@ -453,7 +478,7 @@ export function parseAddresses(header: string | undefined): string[] {
 	for (const entry of splitAddressList(header)) {
 		const angled = entry.match(/<([^<>\s]+@[^<>\s]+)>/);
 		if (angled) {
-			out.push(angled[1].toLowerCase());
+			out.push((angled[1] ?? "").toLowerCase());
 			continue;
 		}
 		// No angle-addr: drop comments and quoted text, then take the address token.
@@ -463,7 +488,7 @@ export function parseAddresses(header: string | undefined): string[] {
 			// A group ends with a semicolon that belongs to the group, not to the
 			// last address in it.
 			.match(/([^\s<>@",;]+@[^\s<>@",;]+)/);
-		if (bare) out.push(bare[1].toLowerCase());
+		if (bare?.[1]) out.push(bare[1].toLowerCase());
 	}
 	return [...new Set(out)];
 }
@@ -524,11 +549,11 @@ export function forwardSubject(original: string | undefined): string {
 
 // The header block Gmail and Thunderbird both put above forwarded content.
 export function forwardHeaderBlock(fields: {
-	from?: string;
-	date?: string;
-	subject?: string;
-	to?: string;
-	cc?: string;
+	from?: string | undefined;
+	date?: string | undefined;
+	subject?: string | undefined;
+	to?: string | undefined;
+	cc?: string | undefined;
 }): string {
 	return [
 		"---------- Forwarded message ---------",
@@ -541,11 +566,11 @@ export function forwardHeaderBlock(fields: {
 }
 
 export function forwardHtmlBlock(fields: {
-	from?: string;
-	date?: string;
-	subject?: string;
-	to?: string;
-	cc?: string;
+	from?: string | undefined;
+	date?: string | undefined;
+	subject?: string | undefined;
+	to?: string | undefined;
+	cc?: string | undefined;
 	body: string;
 }): string {
 	const rows = [
@@ -602,8 +627,8 @@ export function normalizeMessageId(value: string): string | null {
 	return /^<[\s\S]*>$/.test(trimmed) ? trimmed : `<${trimmed}>`;
 }
 
-export function headerValue(message: any, name: string): string | undefined {
-	return message?.payload?.headers?.find((h: any) => h.name.toLowerCase() === name.toLowerCase())
+export function headerValue(message: GmailMessage | undefined, name: string): string | undefined {
+	return message?.payload?.headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())
 		?.value;
 }
 
@@ -612,15 +637,15 @@ function b64urlToBytes(s: string): Uint8Array {
 	return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
 }
 
-export function partCharset(part: any): string {
-	const ct = part?.headers?.find((h: any) => h.name.toLowerCase() === "content-type")?.value;
+export function partCharset(part: GmailPart | undefined): string {
+	const ct = part?.headers?.find((h) => h.name?.toLowerCase() === "content-type")?.value;
 	return ct?.match(/charset="?([\w-]+)"?/i)?.[1] ?? "utf-8";
 }
 
 // Decodes part data honoring its declared charset (ISO-2022-JP and friends);
 // unknown charsets fall back to UTF-8.
-function decodePartData(part: any): string {
-	const bytes = b64urlToBytes(part.body.data);
+function decodePartData(part: GmailPart): string {
+	const bytes = b64urlToBytes(part.body?.data ?? "");
 	try {
 		return new TextDecoder(partCharset(part)).decode(bytes);
 	} catch {
@@ -628,9 +653,9 @@ function decodePartData(part: any): string {
 	}
 }
 
-function flattenParts(payload: any): any[] {
-	const parts: any[] = [];
-	const walk = (p: any) => {
+function flattenParts(payload: GmailPart | undefined): GmailPart[] {
+	const parts: GmailPart[] = [];
+	const walk = (p: GmailPart | undefined) => {
 		if (!p) return;
 		parts.push(p);
 		(p.parts ?? []).forEach(walk);
@@ -660,15 +685,15 @@ function htmlToText(html: string): string {
 // file the sender enclosed rather than the message they wrote. Reading one as
 // the body shows the wrong content and quotes it into replies and forwards,
 // and the order parts arrive in is the sender's to choose.
-function isBodyPart(part: any): boolean {
+function isBodyPart(part: GmailPart): boolean {
 	if (part.filename) return false;
 	const disposition = part?.headers?.find(
-		(h: any) => h?.name?.toLowerCase() === "content-disposition",
+		(h) => h?.name?.toLowerCase() === "content-disposition",
 	)?.value;
 	return !/^\s*attachment/i.test(disposition ?? "");
 }
 
-export function extractBody(payload: any): string {
+export function extractBody(payload: GmailPart | undefined): string {
 	const parts = flattenParts(payload).filter(isBodyPart);
 
 	const plain = parts.find((p) => p.mimeType === "text/plain" && p.body?.data);
@@ -683,7 +708,7 @@ export function extractBody(payload: any): string {
 // Gmail stores large text parts as attachments (body.attachmentId, no data);
 // callers fetch those bytes separately and decode here.
 export function textPartAttachment(
-	payload: any,
+	payload: GmailPart | undefined,
 ): { attachmentId: string; mimeType: string; charset: string; size: number } | null {
 	const parts = flattenParts(payload);
 	const bodies = parts.filter(isBodyPart);
@@ -692,12 +717,12 @@ export function textPartAttachment(
 		bodies.find((p) => p.mimeType === "text/html" && p.body?.attachmentId);
 	if (!part) return null;
 	return {
-		attachmentId: part.body.attachmentId,
-		mimeType: part.mimeType,
+		attachmentId: part.body?.attachmentId ?? "",
+		mimeType: part.mimeType ?? "text/plain",
 		charset: partCharset(part),
 		// Gmail reports the decoded byte count, which is what decides whether
 		// this part is worth fetching at all.
-		size: typeof part.body.size === "number" ? part.body.size : 0,
+		size: part.body?.size ?? 0,
 	};
 }
 
@@ -725,7 +750,7 @@ export function truncate(text: string, limit: number): string {
 	return `${text.slice(0, end)}\n[truncated: ${text.length - end} of ${text.length} characters omitted]`;
 }
 
-export function summarizeMessage(m: any) {
+export function summarizeMessage(m: GmailMessage) {
 	return {
 		id: m.id,
 		threadId: m.threadId,

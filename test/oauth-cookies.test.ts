@@ -10,7 +10,7 @@ function withCookie(value: string): Request {
 }
 
 function cookieValue(setCookie: string): string {
-	return setCookie.slice("__Host-APPROVED_CLIENTS=".length).split(";")[0];
+	return setCookie.slice("__Host-APPROVED_CLIENTS=".length).split(";")[0] ?? "";
 }
 
 describe("approved-client cookie", () => {
