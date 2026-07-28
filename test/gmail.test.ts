@@ -316,6 +316,24 @@ describe("buildRfc822", () => {
 		expect(longest).toBeLessThanOrEqual(998);
 	});
 
+	// An encoded word folds itself, and everything after that fold still has to
+	// be folded: a long recipient list behind a non-ASCII display name has no
+	// break in it otherwise and runs past what a line may carry.
+	test("folds a recipient list that follows an encoded display name", () => {
+		const raw = buildRfc822({
+			to: [
+				"株式会社サンプル 営業部 田中太郎 <tanaka@example.co.jp>",
+				...Array.from({ length: 60 }, (_, i) => `person${i}@example.com`),
+			].join(", "),
+			subject: "s",
+			body: "b",
+		});
+		const longest = Math.max(
+			...raw.split("\r\n").map((line) => new TextEncoder().encode(line).length),
+		);
+		expect(longest).toBeLessThanOrEqual(998);
+	});
+
 	test("keeps a plain filename unencoded", () => {
 		const raw = buildRfc822({
 			to: "a@example.com",

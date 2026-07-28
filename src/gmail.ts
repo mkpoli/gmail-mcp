@@ -258,11 +258,30 @@ function encodeAddressList(value: string): string {
 // RFC 5322 §2.1.1 caps a line at 998 octets and recommends 78, so a long
 // recipient list or subject has to fold. Folding inserts CRLF before existing
 // whitespace; a receiver unfolds by dropping the CRLF, which is why the break
-// only ever lands on a space outside a quoted string. Values that already
-// contain CRLF arrived folded — encoded-words do their own — and are left be.
+// only ever lands on a space outside a quoted string.
 function foldHeader(line: string): string {
-	const LIMIT = 78;
-	if (line.length <= LIMIT || line.includes("\r\n")) return line;
+	// Encoded-words fold themselves, and what follows the fold they inserted
+	// still has to be folded: a header carrying one used to be passed through
+	// whole, so a long recipient list behind a non-ASCII display name grew past
+	// the limit with nothing to break it.
+	if (line.includes("\r\n")) {
+		// Only the hard limit applies here. Breaking these at the recommended
+		// width would split an encoded word from its own header name and rewrite
+		// output that is already correct.
+		return line
+			.split("\r\n")
+			.map((segment) =>
+				segment.startsWith(" ")
+					? ` ${foldSegment(segment.slice(1), MAX_HEADER_RUN)}`
+					: foldSegment(segment, MAX_HEADER_RUN),
+			)
+			.join("\r\n");
+	}
+	return foldSegment(line, 78);
+}
+
+function foldSegment(line: string, LIMIT: number): string {
+	if (line.length <= LIMIT) return line;
 
 	const tokens: string[] = [];
 	let buffer = "";
