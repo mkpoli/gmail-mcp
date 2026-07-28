@@ -37,10 +37,11 @@
 			{
 				"name": "RATE_LIMITER",
 				"type": "ratelimit",
-				"namespace_id": "1001",
+				"namespace_id": "4207",
 				// Gmail calls allowed per account, counted across all its sessions.
 				// The binding reads these at build time — limit() takes only a key —
-				// so this is where the ceiling is set.
+				// so this is where the ceiling is set. The namespace is private to
+				// this Worker: another one sharing the number would share the counters.
 				"simple": { "limit": 120, "period": 60 }
 			}
 		]
