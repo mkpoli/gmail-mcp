@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Fails when a README advertises a different number of tools or tests than the
 source actually has. Both numbers appear in every language, so a change to
-either drifts silently across nine places otherwise."""
+either drifts silently across nine places otherwise.
+
+With --fix, rewrites the claims instead of reporting them. Editing the numbers
+by searching for the digits rewrites whatever else happens to contain them: a
+year, an RFC number, a port. Only the text a claim pattern matched is touched
+here."""
 
 import re
 import subprocess
@@ -39,6 +44,25 @@ def actual_tests() -> int:
     return int(match.group(1))
 
 
+def fix(expected: int, patterns: list[str]) -> list[str]:
+    changed = []
+    for name in READMES:
+        path = ROOT / name
+        text = original = path.read_text(encoding="utf-8")
+        for pattern in patterns:
+            def replace(match: re.Match[str]) -> str:
+                if int(match.group(1)) == expected:
+                    return match.group(0)
+                start, end = match.span(1)
+                return match.group(0)[: start - match.start()] + str(expected) + match.group(0)[end - match.start() :]
+
+            text = re.sub(pattern, replace, text)
+        if text != original:
+            path.write_text(text, encoding="utf-8")
+            changed.append(name)
+    return changed
+
+
 def check(label: str, expected: int, patterns: list[str]) -> list[str]:
     problems = []
     for name in READMES:
@@ -54,6 +78,11 @@ def check(label: str, expected: int, patterns: list[str]) -> list[str]:
 
 
 def main() -> int:
+    if "--fix" in sys.argv:
+        changed = fix(actual_tools(), TOOL_CLAIMS) + fix(actual_tests(), TEST_CLAIMS)
+        for name in sorted(set(changed)):
+            print(f"updated {name}")
+        return 0
     problems = check("tools", actual_tools(), TOOL_CLAIMS)
     problems += check("tests", actual_tests(), TEST_CLAIMS)
     for problem in problems:
