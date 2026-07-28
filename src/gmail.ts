@@ -80,7 +80,12 @@ function assertHeaderSafe(name: string, value: string): string {
 // exceed 75 octets, so longer values become several words joined by folding
 // whitespace, split only on UTF-8 character boundaries.
 function encodeHeader(value: string): string {
-	if (/^[\x20-\x7e]*$/.test(value)) return value;
+	// Folding can only break at whitespace, so a run without any is stuck on one
+	// line and an ASCII value can still pass the 998-octet limit. Encoded-words
+	// break anywhere, and RFC 2047 §6.2 has a receiver drop the whitespace
+	// between adjacent ones, so nothing is added to the text on the way out.
+	const foldable = value.split(" ").every((run) => run.length <= 78);
+	if (/^[\x20-\x7e]*$/.test(value) && foldable) return value;
 	const bytes = new TextEncoder().encode(value);
 	// "=?UTF-8?B?" + base64 + "?=" stays within 75 octets when the raw chunk is
 	// at most 45 bytes, and a multiple of 3 keeps each word padding-free.
@@ -406,7 +411,9 @@ export function parseAddresses(header: string | undefined): string[] {
 		const bare = entry
 			.replace(/\([^)]*\)/g, " ")
 			.replace(/"(?:[^"\\]|\\.)*"/g, " ")
-			.match(/([^\s<>@",]+@[^\s<>@",]+)/);
+			// A group ends with a semicolon that belongs to the group, not to the
+			// last address in it.
+			.match(/([^\s<>@",;]+@[^\s<>@",;]+)/);
 		if (bare) out.push(bare[1].toLowerCase());
 	}
 	return [...new Set(out)];

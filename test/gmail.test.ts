@@ -908,3 +908,32 @@ describe("recipient and body selection, alias-aware", () => {
 		).toBeNull();
 	});
 });
+
+describe("header line limits and address groups", () => {
+	// RFC 5322 §2.1.1 caps a line at 998 octets, and folding can only break at
+	// whitespace, so a long unbroken token has to travel as encoded-words —
+	// adjacent ones are rejoined without the whitespace that separated them.
+	test("keeps every line within 998 octets for an unfoldable subject", () => {
+		const raw = buildRfc822({
+			to: "a@example.com",
+			subject: `https://example.com/${"a".repeat(1200)}`,
+			body: "b",
+		});
+		for (const line of raw.split("\r\n")) {
+			expect(line.length).toBeLessThanOrEqual(998);
+		}
+	});
+
+	test("leaves an ordinary ASCII subject readable", () => {
+		const raw = buildRfc822({ to: "a@example.com", subject: "Quarterly report", body: "b" });
+		expect(raw).toContain("Subject: Quarterly report");
+	});
+
+	test("does not carry a group terminator into an address", () => {
+		expect(parseAddresses("Team: alice@example.com, bob@example.com;")).toEqual([
+			"alice@example.com",
+			"bob@example.com",
+		]);
+		expect(parseAddresses("undisclosed-recipients:;")).toEqual([]);
+	});
+});
