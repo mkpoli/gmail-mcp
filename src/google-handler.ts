@@ -208,7 +208,11 @@ app.get("/callback", async (c) => {
 		const seen = await c.env.OAUTH_KV.get(marker);
 		if (!seen) {
 			const known = await c.env.OAUTH_KV.list({ prefix: "account:", limit: 1000 });
-			if (!isUnderAccountCap(known.keys.length, true, parseLimit(c.env.MAX_ACCOUNTS, 25))) {
+			// A KV listing stops at 1000 keys. Past that the count understates how
+			// many accounts exist, and a cap set above it would never be reached,
+			// so an incomplete listing counts as unbounded and turns the account away.
+			const admitted = known.list_complete ? known.keys.length : Number.POSITIVE_INFINITY;
+			if (!isUnderAccountCap(admitted, true, parseLimit(c.env.MAX_ACCOUNTS, 25))) {
 				console.warn("account cap reached; refused a new sign-in");
 				return c.text(
 					"This server has reached its limit of connected accounts. Ask its operator to raise MAX_ACCOUNTS.",

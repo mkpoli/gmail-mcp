@@ -49,6 +49,14 @@ describe("isUnderAccountCap", () => {
 		expect(isUnderAccountCap(0, true, -1)).toBe(false);
 		expect(isUnderAccountCap(0, true, Number.NaN)).toBe(false);
 	});
+
+	// A KV listing stops at 1000 keys, so a caller that cannot count the accounts
+	// says so with an unbounded count rather than reporting the truncated one.
+	test("an uncountable number of accounts refuses a new one", () => {
+		expect(isUnderAccountCap(Number.POSITIVE_INFINITY, true, 25)).toBe(false);
+		expect(isUnderAccountCap(Number.POSITIVE_INFINITY, true, 5000)).toBe(false);
+		expect(isUnderAccountCap(Number.POSITIVE_INFINITY, false, 25)).toBe(true);
+	});
 });
 
 describe("parseLimit", () => {
