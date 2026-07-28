@@ -107,11 +107,45 @@ Claude Codeでは`/mcp`を実行し、接続ごとに対応するGoogleアカウ
 ## 🔮 できること
 
 
-**読む** — `whoami` · `search_messages` · `get_message` · `get_thread` · `get_attachment`
+<table>
+<tr><th align="left">📖 読む</th><th align="left">✍️ 書く</th><th align="left">🏷 整理する</th></tr>
+<tr valign="top">
+<td>
 
-**書く** — `send_message` · `reply_all` · `forward_message` · `create_draft` · `update_draft` · `send_draft` · `delete_draft` · `list_drafts`
+`whoami`<br>
+`search_messages`<br>
+`get_message`<br>
+`get_thread`<br>
+`get_attachment`
 
-**整理する** — `list_labels` · `create_label` · `update_label` · `delete_label` · `modify_labels` · `modify_thread_labels` · `batch_modify_messages` · `trash_message` · `untrash_message` · `trash_thread` · `untrash_thread`
+</td>
+<td>
+
+`send_message`<br>
+`reply_all`<br>
+`forward_message`<br>
+`create_draft`<br>
+`update_draft`<br>
+`send_draft`<br>
+`delete_draft`<br>
+`list_drafts`
+
+</td>
+<td>
+
+`list_labels`<br>
+`create_label`<br>
+`update_label`<br>
+`delete_label`<br>
+`modify_labels`<br>
+`modify_thread_labels`<br>
+`batch_modify_messages`<br>
+`trash_message` · `untrash_message`<br>
+`trash_thread` · `untrash_thread`
+
+</td>
+</tr>
+</table>
 
 送信するメールの構造は、通常のメールクライアントが組み立てるものと同じです。プレーンテキストにHTML版を添え、ファイルを添付し、`cid:`で参照するインライン画像を埋め込みます。入れ子は`multipart/mixed › multipart/related › multipart/alternative`になります。件名と表示名はRFC 2047、ファイル名はRFC 2231で符号化するので、日本語、中国語、絵文字も文字化けせずに送受信できます。
 
