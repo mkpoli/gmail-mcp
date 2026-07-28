@@ -160,7 +160,7 @@ Messages leave the way a mail client sends them: plain text with an HTML alterna
 
 `reply_all` reads the original's `Reply-To`, `From`, `To`, and `Cc`, drops your own address, carries the `References` chain, and quotes the original in whichever parts you send. `forward_message` reproduces the forwarded envelope and can re-attach the original's files.
 
-Reading is bounded on purpose: message and thread bodies have character budgets and attachments a size ceiling, so a mailing-list thread cannot flood the assistant's context.
+Reading is bounded on purpose: message and thread bodies have character budgets, a whole response has a byte ceiling, and an attachment is returned inline only while it stays small enough to read. A long mailing-list thread, or a large file, comes back trimmed with a note saying so rather than filling the assistant's context.
 
 ---
 
