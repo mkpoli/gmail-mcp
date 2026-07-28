@@ -66,10 +66,10 @@ for (const [name, hint] of secrets) {
 if (await confirm("  Generate a fresh COOKIE_ENCRYPTION_KEY?")) {
 	const key = crypto.getRandomValues(new Uint8Array(32));
 	const hex = [...key].map((b) => b.toString(16).padStart(2, "0")).join("");
-	// Written to wrangler's stdin rather than to a file: a temp file would be
-	// readable by anyone on the machine while it existed, and would survive a
-	// failed or interrupted upload.
-	await $`bunx wrangler secret put COOKIE_ENCRYPTION_KEY`.stdin(new TextEncoder().encode(hex));
+	// Piped rather than written to a file: a temp file would be readable by
+	// anyone on the machine while it existed, and would survive a failed or
+	// interrupted upload.
+	await $`echo ${hex} | bunx wrangler secret put COOKIE_ENCRYPTION_KEY`;
 }
 
 if (await confirm("  Deploy now?")) {
