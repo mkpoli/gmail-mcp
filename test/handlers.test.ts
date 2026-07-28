@@ -301,6 +301,47 @@ describe("reply_all", () => {
 	});
 });
 
+describe("reply_all from a send-as alias", () => {
+	// Mail written to an alias is mail to this account. Treating the alias as a
+	// stranger copies it back to the person replying, and answering from the
+	// primary address hands the correspondent an address they never had.
+	const toAlias = message("m1");
+	toAlias.payload.headers = [
+		{ name: "From", value: "Alice <alice@example.com>" },
+		{ name: "To", value: "sales@example.com" },
+		{ name: "Cc", value: "bob@example.com" },
+		{ name: "Subject", value: "Order" },
+	];
+
+	const serve = () =>
+		serveGmail([
+			[/\/settings\/sendAs/, () => ({ sendAs: [{ sendAsEmail: "sales@example.com" }] })],
+			[/\/messages\/m1\?format=full/, () => toAlias],
+			[/\/messages\/send/, () => ({ id: "sent", threadId: "t-m1" })],
+		]);
+
+	test("keeps the alias out of the reply and answers from it", async () => {
+		const { handlers } = await boot();
+		serve();
+		const out = result(await tool(handlers, "reply_all")({ messageId: "m1", body: "ok" }));
+		expect(out.to).toEqual(["alice@example.com"]);
+		expect(out.cc).toEqual(["bob@example.com"]);
+
+		const sent = requests.find((r) => r.url.includes("/messages/send"));
+		const encoded = String((sent?.body as { raw?: string } | undefined)?.raw ?? "");
+		const mime = atob(encoded.replace(/-/g, "+").replace(/_/g, "/"));
+		expect(mime).toContain("From: sales@example.com");
+	});
+
+	test("reads the identities once and remembers them", async () => {
+		const { handlers } = await boot();
+		serve();
+		await tool(handlers, "reply_all")({ messageId: "m1", body: "one" });
+		await tool(handlers, "reply_all")({ messageId: "m1", body: "two" });
+		expect(requests.filter((r) => r.url.includes("/settings/sendAs"))).toHaveLength(1);
+	});
+});
+
 describe("get_attachment", () => {
 	const withAttachment: ReturnType<typeof message> & {
 		payload: { parts?: Record<string, unknown>[] };
@@ -590,7 +631,6 @@ describe("the public OAuth endpoints", () => {
 					controller.enqueue(new Uint8Array(CHUNK));
 				},
 			}),
-			// @ts-expect-error required for a streamed body, absent from the DOM types
 			duplex: "half",
 		});
 		return { request, offered: () => pulled };

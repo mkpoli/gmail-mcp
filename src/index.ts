@@ -7,6 +7,7 @@ import {
 	b64urlEncode,
 	b64urlToStandard,
 	buildRfc822,
+	canonicalAddress,
 	decodeAttachmentText,
 	decodeEncodedWords,
 	encodedSize,
@@ -72,6 +73,8 @@ const ATTACHMENT_INLINE_LIMIT = 200_000;
 const ACCOUNT_HEADER = "x-gmail-mcp-account";
 // The headers a message summary is built from; nothing else is read.
 const SUMMARY_HEADERS = ["From", "To", "Cc", "Subject", "Date"] as const;
+// How long the account's send-as identities are trusted before being read again.
+const SEND_AS_TTL_MS = 24 * 60 * 60 * 1000;
 
 const filePartSchema = z.object({
 	filename: z.string(),
@@ -210,6 +213,26 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	// One account can open many sessions, so the ceiling has to be counted per
 	// account rather than per Durable Object. The platform limiter keeps that
 	// count outside any one session.
+	// The addresses this account may send as, beyond the Google address itself.
+	// Gmail calls them send-as identities and mail addressed to one is addressed
+	// here. They change about as often as an account is set up, so they are kept
+	// for a day rather than looked up on every reply, and a lookup that fails
+	// leaves replies behaving as they did before it existed.
+	private async sendAsAddresses(): Promise<string[]> {
+		const cached = await this.ctx.storage.get<{ at: number; addresses: string[] }>("sendAs");
+		if (cached && Date.now() - cached.at < SEND_AS_TTL_MS) return cached.addresses;
+		try {
+			const settings = await this.api<{ sendAs?: { sendAsEmail?: string }[] }>("/settings/sendAs");
+			const addresses = (settings.sendAs ?? [])
+				.map((identity) => identity.sendAsEmail?.toLowerCase())
+				.filter((address): address is string => Boolean(address));
+			await this.ctx.storage.put("sendAs", { at: Date.now(), addresses });
+			return addresses;
+		} catch {
+			return [];
+		}
+	}
+
 	private async assertWithinRate(): Promise<void> {
 		const limiter = this.env.RATE_LIMITER;
 		if (!limiter) return;
@@ -666,7 +689,11 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const original = await this.api<GmailMessage>(
 					`/messages/${encodeURIComponent(messageId)}?format=full`,
 				);
-				const self = account.toLowerCase();
+				// Mail to a send-as alias is mail to this account. Without them the
+				// alias looks like a stranger: the reply copies it back to the
+				// sender and goes out from the primary address, naming an identity
+				// the correspondent was never given.
+				const self = [account.toLowerCase(), ...(await this.sendAsAddresses())];
 				const fromAddrs = parseAddresses(headerValue(original, "From"));
 				const toAddrs = parseAddresses(headerValue(original, "To"));
 				const ccAddrs = parseAddresses(headerValue(original, "Cc"));
@@ -682,6 +709,16 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				if (to.length === 0) {
 					throw new Error("reply_all found no recipient other than this account");
 				}
+
+				// Answer from the identity the correspondent wrote to. Gmail sends
+				// as the primary address when none is given, which would hand them
+				// an address they were never given.
+				const written = new Set([...toAddrs, ...ccAddrs].map(canonicalAddress));
+				const spokenTo = self.find((identity) => written.has(canonicalAddress(identity)));
+				const from =
+					spokenTo && canonicalAddress(spokenTo) !== canonicalAddress(account)
+						? spokenTo
+						: undefined;
 
 				// A sender that omitted the angle brackets would otherwise have its
 				// malformed id copied into the reply, where no receiver can thread
@@ -707,6 +744,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					buildRfc822({
 						to: to.join(", "),
 						cc: rest.length > 0 ? rest.join(", ") : undefined,
+						from,
 						subject: replySubject(decodeEncodedWords(headerValue(original, "Subject") ?? "")),
 						body: `${body}\n\n${quotePlain(fromDisplay, date, quoted)}`,
 						htmlBody: htmlBody

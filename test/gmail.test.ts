@@ -741,7 +741,7 @@ describe("replyRecipients", () => {
 	test("answers the sender and copies the rest", () => {
 		expect(
 			replyRecipients({
-				self,
+				self: [self],
 				from: ["alice@example.com"],
 				to: [self, "bob@example.com"],
 				cc: ["carol@example.com"],
@@ -755,7 +755,7 @@ describe("replyRecipients", () => {
 	test("drops an address too long for a header line", () => {
 		expect(
 			replyRecipients({
-				self,
+				self: [self],
 				from: [`${"x".repeat(950)}@example.com`, "alice@example.com"],
 				to: [self, `${"y".repeat(950)}@example.com`, "bob@example.com"],
 				cc: [],
@@ -766,7 +766,7 @@ describe("replyRecipients", () => {
 
 	test("prefers Reply-To over From", () => {
 		const { to } = replyRecipients({
-			self,
+			self: [self],
 			from: ["alice@example.com"],
 			to: [self],
 			cc: [],
@@ -779,7 +779,7 @@ describe("replyRecipients", () => {
 	// audience, and none of them may also appear as a carbon copy.
 	test("never addresses the same person twice", () => {
 		const { to, cc } = replyRecipients({
-			self,
+			self: [self],
 			from: [self],
 			to: ["bob@example.com"],
 			cc: ["carol@example.com"],
@@ -792,7 +792,7 @@ describe("replyRecipients", () => {
 
 	test("drops the replying account from both lists", () => {
 		const { to, cc } = replyRecipients({
-			self,
+			self: [self],
 			from: ["alice@example.com"],
 			to: [self],
 			cc: [self],
@@ -872,7 +872,7 @@ describe("canonicalAddress", () => {
 describe("replyRecipients with aliases", () => {
 	test("does not copy the replying account's own plus alias", () => {
 		const { to, cc } = replyRecipients({
-			self: "john.smith@gmail.com",
+			self: ["john.smith@gmail.com"],
 			from: ["alice@example.com"],
 			to: ["john.smith+alerts@gmail.com", "bob@example.com"],
 			cc: ["johnsmith@gmail.com"],
@@ -884,7 +884,7 @@ describe("replyRecipients with aliases", () => {
 
 	test("keeps a lookalike address on a different domain", () => {
 		const { cc } = replyRecipients({
-			self: "john.smith@gmail.com",
+			self: ["john.smith@gmail.com"],
 			from: ["alice@example.com"],
 			to: ["john.smith@company.com"],
 			cc: [],
@@ -927,7 +927,7 @@ describe("recipient and body selection, alias-aware", () => {
 	// alias of a To recipient still lands in Cc.
 	test("does not copy the same address written differently", () => {
 		const { to, cc } = replyRecipients({
-			self: "me@example.com",
+			self: ["me@example.com"],
 			from: ["alice@example.com"],
 			to: ["USER@example.com", "bob@example.com"],
 			cc: ["user@example.com"],
@@ -941,7 +941,7 @@ describe("recipient and body selection, alias-aware", () => {
 	// recipients even though they reach one mailbox.
 	test("keeps a tagged recipient that is not this account", () => {
 		const { cc } = replyRecipients({
-			self: "me@example.com",
+			self: ["me@example.com"],
 			from: ["alice@example.com"],
 			to: ["bob@example.com"],
 			cc: ["bob+invoices@example.com"],

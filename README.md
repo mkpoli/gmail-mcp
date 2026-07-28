@@ -13,7 +13,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#what-it-can-do)
-[![tests](https://img.shields.io/badge/tests-197_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
+[![tests](https://img.shields.io/badge/tests-199_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
 
 *[日本語版](./README.ja.md) · [简体中文](./README.zh.md)*
 
@@ -158,7 +158,7 @@ Your deployment serves this guide at `https://<your-domain>/`.
 
 Messages leave the way a mail client sends them: plain text with an HTML alternative, file attachments, and inline images referenced by `cid:`, nested as `multipart/mixed › multipart/related › multipart/alternative`. Subjects and display names use RFC 2047, filenames use RFC 2231, so Japanese, Chinese, and emoji survive the trip.
 
-`reply_all` reads the original's `Reply-To`, `From`, `To`, and `Cc`, drops your own address, carries the `References` chain, and quotes the original in whichever parts you send. `forward_message` reproduces the forwarded envelope and can re-attach the original's files.
+`reply_all` reads the original's `Reply-To`, `From`, `To`, and `Cc`, drops your own address and any address you send mail as, answers from the one the sender wrote to, carries the `References` chain, and quotes the original in whichever parts you send. `forward_message` reproduces the forwarded envelope and can re-attach the original's files.
 
 Reading is bounded on purpose: message and thread bodies have character budgets, a whole response has a byte ceiling, and an attachment is returned inline only while it stays small enough to read. A long mailing-list thread, or a large file, comes back trimmed with a note saying so rather than filling the assistant's context.
 
@@ -277,7 +277,7 @@ The Worker decrypts mail in memory while serving a request, as any hosted relay 
 
 ## How it was tested
 
-197 unit tests cover message construction (MIME nesting, RFC 2047 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, the CSRF and state-binding checks that guard the browser side of sign-in, and the tools themselves against a stand-in Gmail — session ownership, recipient composition, attachment selection, and what a partly-failed read returns.
+199 unit tests cover message construction (MIME nesting, RFC 2047 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, the CSRF and state-binding checks that guard the browser side of sign-in, and the tools themselves against a stand-in Gmail — session ownership, recipient composition, attachment selection, and what a partly-failed read returns.
 
 Beyond that, every tool has run against real Gmail accounts, with a separate account checking what arrived:
 
@@ -297,7 +297,7 @@ Beyond that, every tool has run against real Gmail accounts, with a separate acc
 ```sh
 bun run dev     # wrangler dev on :8788
 bun run check   # biome + tsc
-bun test        # 197 unit tests
+bun test        # 199 unit tests
 bun run assets  # regenerate the light and dark diagrams
 bun run deploy
 ```

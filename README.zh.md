@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#能做什么)
-[![tests](https://img.shields.io/badge/tests-197_passing-success?logo=bun&logoColor=white)](#测试)
+[![tests](https://img.shields.io/badge/tests-199_passing-success?logo=bun&logoColor=white)](#测试)
 
 *[English README](./README.md) · [日本語版](./README.ja.md)*
 
@@ -146,7 +146,7 @@ claude mcp add --transport http gmail-work     https://<你的域名>/mcp/work
 
 邮件结构和普通邮件客户端的一样：纯文本附一份HTML替代版本，文件附件，以`cid:`引用的内嵌图片，整体嵌套成`multipart/mixed › multipart/related › multipart/alternative`。主题和显示名用RFC 2047编码，文件名用RFC 2231，日文、中文、emoji都能完整送达。
 
-`reply_all`读取原信的`Reply-To`、`From`、`To`、`Cc`，去掉你自己的地址，接上`References`链，并按你发送的格式引用原文。`forward_message`复现被转发邮件的信封，还可以把原信附件重新带上。
+`reply_all`读取原信的`Reply-To`、`From`、`To`、`Cc`，去掉你自己的地址和你可以用来发信的地址，用对方写到的那个地址回信，接上`References`链，并按你发送的格式引用原文。`forward_message`复现被转发邮件的信封，还可以把原信附件重新带上。
 
 读取有意设了上限：邮件和会话正文有字符数预算，整个响应有字节上限，附件只在足够小的时候才直接返回。很长的邮件列表会话或者很大的文件会被截断，并附上说明，不会淹掉助手的上下文。
 
@@ -261,7 +261,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 
 ## 测试
 
-197个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，登录流程里的CSRF和state校验，以及用一个替身Gmail跑通工具本身：会话归属判定、收件人组装、附件选择，还有读取部分失败时返回什么。
+199个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，登录流程里的CSRF和state校验，以及用一个替身Gmail跑通工具本身：会话归属判定、收件人组装、附件选择，还有读取部分失败时返回什么。
 
 另外，所有工具都在真实Gmail账号上跑过，再用另一个账号检查收到的东西：
 
@@ -281,7 +281,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 ```sh
 bun run dev     # wrangler dev，端口8788
 bun run check   # biome + tsc
-bun test        # 197个单元测试
+bun test        # 199个单元测试
 bun run assets  # 重新生成明暗两套图示
 bun run deploy
 ```

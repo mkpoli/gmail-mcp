@@ -580,14 +580,17 @@ export function canonicalAddress(address: string): string {
 // and the carbon copies are whoever is left after that, or the same person
 // would be addressed twice.
 export function replyRecipients(fields: {
-	self: string;
+	self: string[];
 	from: string[];
 	to: string[];
 	cc: string[];
 	replyTo: string[];
 }): { to: string[]; cc: string[] } {
-	const self = canonicalAddress(fields.self);
-	const notSelf = (a: string) => canonicalAddress(a) !== self;
+	// Mail addressed to a send-as alias is addressed to this account, so every
+	// identity it can send from counts as itself: otherwise a reply copies the
+	// alias back to the person replying.
+	const selves = new Set(fields.self.map(canonicalAddress));
+	const notSelf = (a: string) => !selves.has(canonicalAddress(a));
 	// An address wider than a header line has nowhere to fold and cannot be
 	// sent. It arrived from the sender, and RFC 5321 caps a local part at 64
 	// octets, so it reaches no mailbox either: the reply goes to everyone else
