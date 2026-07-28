@@ -817,11 +817,14 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 									"this message carries more attachment data than can be forwarded; forward it from a mail client",
 								);
 							}
-							const blob = a.data
-								? { data: a.data }
-								: await this.api<AttachmentBody>(
+							// Which store the bytes are in is told by the id, not by
+							// whether there are any: an empty file has none either way,
+							// and asking Gmail for it under a blank id is a 404.
+							const blob = a.attachmentId
+								? await this.api<AttachmentBody>(
 										`/messages/${encodeURIComponent(original.id ?? "")}/attachments/${encodeURIComponent(a.attachmentId)}`,
-									);
+									)
+								: { data: a.data };
 							return {
 								filename: a.filename,
 								contentType: a.mimeType,
@@ -931,14 +934,15 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				}
 
 				// A part that arrived whole carries its own bytes; only an
-				// externalised one has to be fetched.
-				const data: string = part.data
-					? part.data
-					: ((
+				// externalised one has to be fetched, and which it is depends on
+				// whether it has an id rather than on whether it has any bytes.
+				const data: string = part.attachmentId
+					? ((
 							await this.api<AttachmentBody>(
 								`/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.attachmentId)}`,
 							)
-						)?.data ?? "");
+						)?.data ?? "")
+					: part.data;
 				const meta = { filename: part.filename, mimeType: part.mimeType, size: part.size };
 				if (textOnly) {
 					if (!part.mimeType?.startsWith("text/")) {
