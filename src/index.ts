@@ -197,12 +197,13 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			`/messages/${encodeURIComponent(inReplyTo)}?format=metadata&metadataHeaders=Message-ID`,
 		);
 		const resolved = headerValue(m, "Message-ID");
-		if (!resolved) {
+		const normalized = resolved ? normalizeMessageId(resolved) : null;
+		if (!normalized) {
 			throw new Error(
 				`message ${inReplyTo} carries no Message-ID header to reply to; pass the Message-ID header value as inReplyTo`,
 			);
 		}
-		return resolved;
+		return normalized;
 	}
 
 	private text(data: unknown) {
@@ -532,8 +533,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				// malformed id copied into the reply, where no receiver can thread
 				// on it. Nothing usable means no threading header at all; the
 				// thread id still carries the reply into the conversation.
-				const original_id = headerValue(original, "Message-ID");
-				const messageIdHeader = original_id ? normalizeMessageId(original_id) : null;
+				const originalMessageId = headerValue(original, "Message-ID");
+				const messageIdHeader = originalMessageId ? normalizeMessageId(originalMessageId) : null;
 				const references = [headerValue(original, "References"), messageIdHeader]
 					.filter(Boolean)
 					.join(" ");
