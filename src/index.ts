@@ -352,7 +352,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					...summarizeMessage(m),
 					messageIdHeader: headerValue(m, "Message-ID"),
 					body: truncate(await this.messageBody(m), BODY_LIMIT),
-					attachments: collectAttachments(m.payload),
+					attachments: collectAttachments(m.payload).map(describeAttachment),
 				});
 			},
 		);
@@ -802,7 +802,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 		this.server.tool(
 			"get_attachment",
-			`Download an attachment from a message in ${account} (base64, capped at ~1.5 MB; text types also decoded)`,
+			`Download an attachment from a message in ${account}. Returns base64 while it stays small enough to read; text types come back decoded`,
 			{
 				messageId: z.string(),
 				attachmentId: z
@@ -1009,6 +1009,26 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			},
 		);
 	}
+}
+
+// What a listing says about an attachment. The bytes are deliberately not here:
+// a message with three inline images would otherwise put a few hundred kilobytes
+// of base64 into every read of it, beside a body that is capped at a fraction of
+// that. They are fetched when they are asked for.
+function describeAttachment(a: {
+	filename: string;
+	mimeType: string;
+	size: number;
+	attachmentId: string;
+	charset: string;
+}) {
+	return {
+		filename: a.filename,
+		mimeType: a.mimeType,
+		size: a.size,
+		attachmentId: a.attachmentId,
+		charset: a.charset,
+	};
 }
 
 function collectAttachments(payload: GmailPart | undefined) {

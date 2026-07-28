@@ -427,3 +427,36 @@ describe("attachments that arrive whole", () => {
 		expect(requests.filter((r) => r.url.includes("/attachments/"))).toHaveLength(0);
 	});
 });
+
+describe("what a listing carries", () => {
+	// A read that only wanted the body should not pay for the attachments. The
+	// bytes are fetched when they are asked for, not carried in every listing.
+	test("names an inline attachment without embedding it", async () => {
+		const { handlers } = await boot();
+		const big = b64url("x".repeat(30_000));
+		serveGmail([
+			[
+				/\/messages\/m1\?format=full/,
+				() =>
+					message("m1", {
+						payload: {
+							mimeType: "multipart/mixed",
+							parts: [
+								{ mimeType: "text/plain", body: { data: b64url("body") } },
+								{
+									mimeType: "image/png",
+									filename: "shot.png",
+									body: { size: 30_000, data: big },
+								},
+							],
+						},
+					}),
+			],
+		]);
+		const out = result(await tool(handlers, "get_message")({ messageId: "m1" }));
+		const listed = (out.attachments as Record<string, unknown>[])[0];
+		expect(listed?.filename).toBe("shot.png");
+		expect(listed).not.toHaveProperty("data");
+		expect(JSON.stringify(out).length).toBeLessThan(5_000);
+	});
+});
