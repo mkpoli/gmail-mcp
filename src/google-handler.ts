@@ -29,9 +29,10 @@ import {
 // gmail.modify covers read, search, labels, trash, drafts, and send,
 // while excluding permanent deletion and account settings.
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
+const EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 const GOOGLE_SCOPE = [
 	GMAIL_SCOPE,
-	"https://www.googleapis.com/auth/userinfo.email",
+	EMAIL_SCOPE,
 	"https://www.googleapis.com/auth/userinfo.profile",
 ].join(" ");
 
@@ -231,6 +232,16 @@ app.get("/callback", async (c) => {
 	if (granted.length > 0 && !granted.includes(GMAIL_SCOPE)) {
 		return c.text(
 			"Gmail access was not granted. Sign in again and leave the Gmail permission ticked.",
+			403,
+		);
+	}
+	// The address is what the allowlist, the account cap, the session owner and
+	// the stored grant are all keyed by, so a consent that leaves it out cannot
+	// finish. Saying so here beats the lookup failing a moment later with
+	// nothing the person signing in can act on.
+	if (granted.length > 0 && !granted.includes(EMAIL_SCOPE)) {
+		return c.text(
+			"Your email address was not shared. Sign in again and leave the email permission ticked.",
 			403,
 		);
 	}

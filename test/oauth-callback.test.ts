@@ -38,7 +38,7 @@ function memoryKv() {
 }
 
 /** Google answering the code exchange and the userinfo lookup. */
-function serveGoogle(email: string, overrides: { verified?: boolean } = {}) {
+function serveGoogle(email: string, overrides: { verified?: boolean; scope?: string } = {}) {
 	globalThis.fetch = (async (input: string | URL | Request) => {
 		const url = String(input);
 		if (url.includes("oauth2.googleapis.com/token")) {
@@ -47,14 +47,20 @@ function serveGoogle(email: string, overrides: { verified?: boolean } = {}) {
 					access_token: "at",
 					refresh_token: "rt",
 					expires_in: 3600,
-					scope: "https://www.googleapis.com/auth/gmail.modify",
+					scope:
+						overrides.scope ??
+						"https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
 				}),
 				{ status: 200, headers: { "Content-Type": "application/json" } },
 			);
 		}
 		if (url.includes("/oauth2/v2/userinfo")) {
 			return new Response(
-				JSON.stringify({ email, verified_email: overrides.verified ?? true, name: "Tester" }),
+				JSON.stringify(
+					email
+						? { email, verified_email: overrides.verified ?? true, name: "Tester" }
+						: { name: "Tester" },
+				),
 				{ status: 200, headers: { "Content-Type": "application/json" } },
 			);
 		}
@@ -192,5 +198,43 @@ describe("the cookies the approval sets", () => {
 		const cookies = approved.headers.getSetCookie();
 		expect(cookies).toHaveLength(3);
 		expect(cookies.some((c) => c.startsWith("__Host-CONSENTED_STATE="))).toBe(true);
+	});
+});
+
+describe("a consent that granted only some of what was asked", () => {
+	// Google lets someone untick a permission and approve the rest. Without the
+	// address there is nothing to key the allowlist, the account cap or the
+	// session owner by, so the sign-in cannot finish — and it used to fail at
+	// the userinfo lookup as a bare 500.
+	test("says which permission was withheld instead of failing late", async () => {
+		const kv = memoryKv();
+		const completed: string[] = [];
+		serveGoogle("", {
+			scope:
+				"https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/userinfo.profile",
+		});
+		const response = await GoogleHandler.fetch(
+			await callbackRequest(kv),
+			envFor(kv, "*", completed) as never,
+			{} as never,
+		);
+		expect(response.status).toBe(403);
+		expect(await response.text()).toMatch(/email permission/);
+		expect(completed).toEqual([]);
+	});
+
+	test("still refuses a consent without the Gmail permission", async () => {
+		const kv = memoryKv();
+		const completed: string[] = [];
+		serveGoogle("owner@example.com", {
+			scope: "https://www.googleapis.com/auth/userinfo.email",
+		});
+		const response = await GoogleHandler.fetch(
+			await callbackRequest(kv),
+			envFor(kv, "*", completed) as never,
+			{} as never,
+		);
+		expect(response.status).toBe(403);
+		expect(await response.text()).toMatch(/Gmail permission/);
 	});
 });
