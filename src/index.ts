@@ -25,7 +25,7 @@ import {
 	truncate,
 } from "./gmail";
 import { GoogleHandler } from "./google-handler";
-import { decodeRequestProps, type Props, refreshGoogleToken } from "./utils";
+import { type Props, refreshGoogleToken } from "./utils";
 
 type TokenCache = { accessToken: string; expiresAt: number };
 
@@ -40,6 +40,10 @@ const THREAD_TOTAL_BUDGET = 30_000;
 // any bytes are fetched — base64 of a large file would otherwise be buffered
 // whole in the session's Durable Object before any cap could apply.
 const ATTACHMENT_BYTE_LIMIT = 1_500_000;
+// How long a session id stays bound to the account that opened it. Long enough
+// to outlast any real connection, short enough that abandoned ids do not
+// accumulate in KV for ever.
+const SESSION_OWNER_TTL = 60 * 60 * 24 * 7;
 
 const filePartSchema = z.object({
 	filename: z.string(),
@@ -59,54 +63,12 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		version: "0.1.0",
 	});
 
-	// Which account is calling, taken from the props that arrive with each
-	// request. The object is addressed by session id alone and stays warm
-	// between requests, while `this.props` is assigned only when it starts, so
-	// on a warm session that field still names whoever opened it. Reading it
-	// would answer a second account with the first one's identity and Google
-	// token, and would compare that same stale identity against the recorded
-	// owner — a check that can only ever agree with itself.
-	private requestProps: Props | null = null;
-
-	override async fetch(request: Request): Promise<Response> {
-		const encoded = request.headers.get("x-partykit-props");
-		const caller = encoded ? decodeRequestProps(encoded) : null;
-		// One object serves one account, so an account that does not own this
-		// session is turned away before it can touch anything the owner's
-		// in-flight requests read. Requests interleave at every await, and the
-		// field below is shared between them: letting a stranger write it would
-		// hand its identity to work already under way for someone else.
-		if (caller && !(await this.ownsSession(caller.email))) {
-			return new Response("this MCP session belongs to a different Google account", {
-				status: 403,
-			});
-		}
-		// Transport requests that open the stream or close the session carry no
-		// props, and they must not erase the identity the object is serving.
-		if (caller) this.requestProps = caller;
-		return super.fetch(request);
-	}
-
-	// True once the session belongs to this account, claiming it if it is still
-	// unclaimed. The read and the write are not separated by an await, so two
-	// arrivals cannot both see it unclaimed.
-	private async ownsSession(email: string): Promise<boolean> {
-		const caller = email.toLowerCase();
-		const owner = await this.ctx.storage.get<string>("owner");
-		if (owner === undefined) {
-			await this.ctx.storage.put("owner", caller);
-			return true;
-		}
-		return owner === caller;
-	}
-
 	// Access tokens live one hour; the refresh token from props mints new ones.
 	// The freshest token is kept in DO storage because props are immutable
 	// for the lifetime of the MCP grant.
 	private get grantProps(): Props {
-		const props = this.requestProps ?? this.props;
-		if (!props) throw new Error("missing auth props on MCP session");
-		return props;
+		if (!this.props) throw new Error("missing auth props on MCP session");
+		return this.props;
 	}
 
 	// The MCP transport addresses this Durable Object by the Mcp-Session-Id
@@ -117,12 +79,17 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	// comparison is only worth anything because the caller comes from the
 	// request rather than from the object's start-up state.
 	private async assertSessionOwner(): Promise<void> {
-		// Every request carrying an account is checked at the boundary in fetch()
-		// and turned away there if it is not this session's, so nothing with
-		// another account's identity reaches here. This repeats the comparison
-		// against whatever identity the call is actually running under.
+		// The account is settled before the request reaches this object, so this
+		// is a second line rather than the first. It still catches the case where
+		// the object was evicted and woken by a different account, which leaves
+		// its identity in `this.props` while the recorded owner is unchanged.
 		const caller = this.grantProps.email.toLowerCase();
-		if (!(await this.ownsSession(caller))) {
+		const owner = await this.ctx.storage.get<string>("owner");
+		if (owner === undefined) {
+			await this.ctx.storage.put("owner", caller);
+			return;
+		}
+		if (owner !== caller) {
 			throw new Error("this MCP session belongs to a different Google account");
 		}
 	}
@@ -892,9 +859,41 @@ function collectAttachments(payload: any) {
 // api routes by string prefix and dispatches to the first match, so a separate
 // alias entry after "/mcp" would never be reached. Sessions are keyed by the
 // Mcp-Session-Id header rather than the path, so aliases never share state.
+// A session is a Durable Object addressed by the Mcp-Session-Id header alone,
+// so without this the header would decide whose mailbox a request reaches. The
+// account has to be settled out here: inside the object the transport reaches
+// the agent through a request carrying the client's own headers, so nothing
+// there distinguishes an authenticated account from a claimed one.
+const mcpAgent = GmailMCP.serve("/mcp{/:label}?") as {
+	fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
+};
+
+const mcpHandler = {
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		const email = (ctx.props as Props | undefined)?.email?.toLowerCase();
+		const sessionId = request.headers.get("mcp-session-id");
+		if (email && sessionId) {
+			const key = `session-owner:${sessionId}`;
+			const owner = await env.OAUTH_KV.get(key);
+			if (owner === null) {
+				await env.OAUTH_KV.put(key, email, { expirationTtl: SESSION_OWNER_TTL });
+			} else if (owner !== email) {
+				return new Response("this MCP session belongs to a different Google account", {
+					status: 403,
+				});
+			}
+		}
+		// The transport copies these headers on to the agent, so a client-supplied
+		// one would arrive looking exactly like an authenticated identity.
+		const forwarded = new Request(request);
+		forwarded.headers.delete("x-partykit-props");
+		return mcpAgent.fetch(forwarded, env, ctx);
+	},
+};
+
 export default new OAuthProvider({
 	apiHandlers: {
-		"/mcp": GmailMCP.serve("/mcp{/:label}?") as any,
+		"/mcp": mcpHandler as any,
 	},
 	authorizeEndpoint: "/authorize",
 	clientRegistrationEndpoint: "/register",

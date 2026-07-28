@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decodeRequestProps, isEmailAllowed, isUnderAccountCap, parseLimit } from "../src/utils";
+import { isEmailAllowed, isUnderAccountCap, parseLimit } from "../src/utils";
 
 describe("isEmailAllowed", () => {
 	test("admits no one when unset or empty", () => {
@@ -70,45 +70,5 @@ describe("parseLimit", () => {
 		expect(parseLimit("nope", 25)).toBe(25);
 		expect(parseLimit("0", 25)).toBe(25);
 		expect(parseLimit("-5", 25)).toBe(25);
-	});
-});
-
-describe("decodeRequestProps", () => {
-	const props = {
-		email: "a@example.com",
-		name: "A",
-		accessToken: "at",
-		refreshToken: "rt",
-		expiresAt: 1,
-	};
-	const b64 = (o: unknown) => {
-		const bytes = new TextEncoder().encode(JSON.stringify(o));
-		let binary = "";
-		for (const b of bytes) binary += String.fromCharCode(b);
-		return btoa(binary);
-	};
-
-	test("reads the base64 form the transport sends", () => {
-		expect(decodeRequestProps(b64(props))?.email).toBe("a@example.com");
-	});
-
-	test("reads the raw JSON form older callers send", () => {
-		expect(decodeRequestProps(JSON.stringify(props))?.email).toBe("a@example.com");
-	});
-
-	test("survives a non-ASCII display name", () => {
-		expect(decodeRequestProps(b64({ ...props, name: "山田太郎" }))?.name).toBe("山田太郎");
-	});
-
-	// Anything unreadable must not be mistaken for an identity; the caller falls
-	// back and the ownership check still has something to compare.
-	test.each([
-		["not base64", "@@@@"],
-		["not JSON", btoa("hello")],
-		["no email", b64({ name: "A" })],
-		["email is not a string", b64({ email: 42 })],
-		["empty", ""],
-	])("returns null for %s", (_name, value) => {
-		expect(decodeRequestProps(value)).toBeNull();
 	});
 });
