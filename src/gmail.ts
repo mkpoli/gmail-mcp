@@ -3,6 +3,11 @@
 
 const BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 
+// Gmail refuses a message over 25 MB, and base64 costs a third on top of the
+// bytes it carries. The ceiling is on the encoded length because that is what
+// arrives and what gets copied during assembly.
+const MAX_ENCODED_ATTACHMENT_BYTES = 34_000_000;
+
 export class GmailApiError extends Error {
 	constructor(
 		public status: number,
@@ -342,6 +347,18 @@ export function buildRfc822({
 	if (inlineImages.length > 0 && !htmlBody) {
 		throw new Error("inline images require an htmlBody that references their cid");
 	}
+	// Assembly copies the payload several times over — normalized, wrapped,
+	// joined, encoded — so a message far past what Gmail would accept anyway
+	// is refused before any of those copies exist.
+	const encodedBytes = [...attachments, ...inlineImages].reduce(
+		(total, part) => total + part.content.length,
+		0,
+	);
+	if (encodedBytes > MAX_ENCODED_ATTACHMENT_BYTES) {
+		throw new Error(
+			`attachments total ${encodedBytes} encoded bytes, past the ${MAX_ENCODED_ATTACHMENT_BYTES}-byte ceiling`,
+		);
+	}
 
 	const headers = [
 		`To: ${encodeAddressList(to)}`,
@@ -606,7 +623,7 @@ export function extractBody(payload: any): string {
 // callers fetch those bytes separately and decode here.
 export function textPartAttachment(
 	payload: any,
-): { attachmentId: string; mimeType: string; charset: string } | null {
+): { attachmentId: string; mimeType: string; charset: string; size: number } | null {
 	const parts = flattenParts(payload);
 	const part =
 		parts.find((p) => p.mimeType === "text/plain" && p.body?.attachmentId && !p.filename) ??
@@ -616,6 +633,9 @@ export function textPartAttachment(
 		attachmentId: part.body.attachmentId,
 		mimeType: part.mimeType,
 		charset: partCharset(part),
+		// Gmail reports the decoded byte count, which is what decides whether
+		// this part is worth fetching at all.
+		size: typeof part.body.size === "number" ? part.body.size : 0,
 	};
 }
 

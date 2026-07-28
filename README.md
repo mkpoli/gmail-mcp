@@ -13,7 +13,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#what-it-can-do)
-[![tests](https://img.shields.io/badge/tests-130_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
+[![tests](https://img.shields.io/badge/tests-133_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
 
 *[日本語版](./README.ja.md) · [简体中文](./README.zh.md)*
 
@@ -273,7 +273,7 @@ The Worker decrypts mail in memory while serving a request, as any hosted relay 
 
 ## How it was tested
 
-130 unit tests cover message construction (MIME nesting, RFC 2047 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, and the CSRF and state-binding checks that guard the browser side of sign-in.
+133 unit tests cover message construction (MIME nesting, RFC 2047 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, and the CSRF and state-binding checks that guard the browser side of sign-in.
 
 Beyond that, every tool has run against real Gmail accounts, with a separate account checking what arrived:
 
@@ -293,7 +293,7 @@ Beyond that, every tool has run against real Gmail accounts, with a separate acc
 ```sh
 bun run dev     # wrangler dev on :8788
 bun run check   # biome + tsc
-bun test        # 130 unit tests
+bun test        # 133 unit tests
 bun run assets  # regenerate the light and dark diagrams
 bun run deploy
 ```

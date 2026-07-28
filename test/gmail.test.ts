@@ -424,7 +424,7 @@ describe("textPartAttachment / decodeAttachmentText / truncate", () => {
 					mimeType: "text/plain",
 					filename: "",
 					headers: [{ name: "Content-Type", value: "text/plain; charset=utf-8" }],
-					body: { attachmentId: "body-att" },
+					body: { attachmentId: "body-att", size: 4096 },
 				},
 			],
 		};
@@ -432,7 +432,19 @@ describe("textPartAttachment / decodeAttachmentText / truncate", () => {
 			attachmentId: "body-att",
 			mimeType: "text/plain",
 			charset: "utf-8",
+			size: 4096,
 		});
+	});
+
+	// The size decides whether the part is fetched at all, so an absent one has
+	// to read as zero rather than as undefined.
+	test("reports zero when Gmail omits the part size", () => {
+		const payload = {
+			mimeType: "text/plain",
+			filename: "",
+			body: { attachmentId: "body-att" },
+		};
+		expect(textPartAttachment(payload)?.size).toBe(0);
 	});
 
 	test("returns null when every part is inline", () => {
@@ -833,5 +845,33 @@ describe("replyRecipients with aliases", () => {
 			replyTo: [],
 		});
 		expect(cc).toEqual(["john.smith@company.com"]);
+	});
+});
+
+describe("outgoing size ceiling", () => {
+	test("refuses attachments larger than Gmail would accept", () => {
+		const huge = "A".repeat(35_000_000);
+		expect(() =>
+			buildRfc822({
+				to: "a@example.com",
+				subject: "s",
+				body: "b",
+				attachments: [
+					{ filename: "big.bin", contentType: "application/octet-stream", content: huge },
+				],
+			}),
+		).toThrow(/ceiling/);
+	});
+
+	test("lets an ordinary attachment through", () => {
+		const ok = btoa("small file contents");
+		expect(() =>
+			buildRfc822({
+				to: "a@example.com",
+				subject: "s",
+				body: "b",
+				attachments: [{ filename: "a.txt", contentType: "text/plain", content: ok }],
+			}),
+		).not.toThrow();
 	});
 });

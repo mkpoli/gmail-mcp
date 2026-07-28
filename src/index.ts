@@ -197,6 +197,12 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		if (inline) return inline;
 		const ref = textPartAttachment(m.payload);
 		if (!ref) return "";
+		// The bytes are buffered, decoded and stripped before any character
+		// budget applies, so an oversized part is refused on its declared size
+		// rather than fetched and then trimmed.
+		if (ref.size > ATTACHMENT_BYTE_LIMIT) {
+			return `[body is ${ref.size} bytes, past the ${ATTACHMENT_BYTE_LIMIT}-byte limit; read it with get_attachment]`;
+		}
 		const att = await this.api(
 			`/messages/${encodeURIComponent(m.id)}/attachments/${encodeURIComponent(ref.attachmentId)}`,
 		);
