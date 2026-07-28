@@ -109,7 +109,7 @@ export async function exchangeGoogleCode({
 		}).toString(),
 	});
 	if (!resp.ok) {
-		const detail = await resp.text();
+		const detail = await readBoundedText(resp.body);
 		console.error("google token exchange failed:", resp.status, detail);
 		// Google refuses a spent, mismatched or expired code with a 4xx. Passing
 		// that back as a server fault tells the person signing in to wait for a
@@ -149,7 +149,9 @@ export async function refreshGoogleToken({
 		}).toString(),
 	});
 	if (!resp.ok) {
-		throw new Error(`google token refresh failed: ${resp.status} ${await resp.text()}`);
+		throw new Error(
+			`google token refresh failed: ${resp.status} ${await readBoundedText(resp.body)}`,
+		);
 	}
 	const tokens = (await resp.json()) as GoogleTokens;
 	if (!tokens.access_token || typeof tokens.expires_in !== "number") {
@@ -182,6 +184,35 @@ export async function fetchGoogleUserInfo(accessToken: string) {
 // request occupies, so the body is counted as it arrives and refused part-way
 // rather than after it has all been held.
 export class BodyTooLarge extends Error {}
+
+// What an error response is worth reading. The peer decides how much it sends,
+// and a diagnostic that has to be held whole before it can be trimmed is one
+// the sender chose the size of.
+export const MAX_ERROR_BYTES = 4_000;
+
+export async function readBoundedText(body: ReadableStream<Uint8Array> | null): Promise<string> {
+	const reader = body?.getReader();
+	if (!reader) return "";
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		chunks.push(value);
+		total += value.byteLength;
+		if (total >= MAX_ERROR_BYTES) {
+			await reader.cancel();
+			break;
+		}
+	}
+	const joined = new Uint8Array(total);
+	let at = 0;
+	for (const chunk of chunks) {
+		joined.set(chunk, at);
+		at += chunk.byteLength;
+	}
+	return new TextDecoder().decode(joined.subarray(0, MAX_ERROR_BYTES));
+}
 
 export async function readBoundedBody(request: Request, limit: number): Promise<Uint8Array> {
 	const reader = request.body?.getReader();

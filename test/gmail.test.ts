@@ -1118,6 +1118,33 @@ describe("threading header length", () => {
 	});
 });
 
+describe("an error response the peer chose the size of", () => {
+	// Trimming after the fact still means holding whatever arrived. What is
+	// counted is what was pulled off the stream, not what was offered.
+	test("stops reading a very large error body", async () => {
+		let pulled = 0;
+		const original = globalThis.fetch;
+		globalThis.fetch = (async () =>
+			new Response(
+				new ReadableStream({
+					pull(controller) {
+						if (pulled >= 256) return controller.close();
+						pulled += 1;
+						controller.enqueue(new Uint8Array(64 * 1024).fill(0x61));
+					},
+				}),
+				{ status: 500 },
+			)) as unknown as typeof fetch;
+		try {
+			await expect(gmailFetch("token", "/messages")).rejects.toThrow(GmailApiError);
+			// 16 MiB was on offer.
+			expect(pulled).toBeLessThan(8);
+		} finally {
+			globalThis.fetch = original;
+		}
+	});
+});
+
 describe("gmailFetch response ceiling", () => {
 	const realFetch = globalThis.fetch;
 	afterEach(() => {

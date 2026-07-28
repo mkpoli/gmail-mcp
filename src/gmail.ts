@@ -1,6 +1,8 @@
 // Minimal Gmail REST helpers. The googleapis package is too heavy for Workers;
 // every call here is a plain fetch against gmail.googleapis.com.
 
+import { readBoundedText } from "./utils";
+
 const BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 
 // Assembling a message copies it several times over — normalised, wrapped,
@@ -27,7 +29,6 @@ const MAX_RESPONSE_BYTES = 6_000_000;
 // How long a single Gmail call may take before it is abandoned.
 const GMAIL_TIMEOUT_MS = 30_000;
 // As much of a failure as is worth repeating back to the caller.
-const MAX_ERROR_BYTES = 4_000;
 
 // The parts of Gmail's message shape this server reads. Everything is optional
 // because the API omits fields by format and by message: a metadata read has no
@@ -81,7 +82,9 @@ export async function gmailFetch<T = unknown>(
 	});
 	if (!resp.ok) {
 		// An error body is a response like any other, and nothing else caps it.
-		const detail = (await resp.text()).slice(0, MAX_ERROR_BYTES);
+		// Trimming after the fact still holds whatever arrived, so it is counted
+		// on the way in and the rest is left unread.
+		const detail = await readBoundedText(resp.body);
 		throw new GmailApiError(resp.status, detail);
 	}
 	if (resp.status === 204) return null as T;
