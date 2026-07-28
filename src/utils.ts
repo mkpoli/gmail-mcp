@@ -1,3 +1,7 @@
+// A stalled call to Google would hold the session object open for as long as
+// the connection lasts, so these give up on the same terms the Gmail calls do.
+const GOOGLE_TIMEOUT_MS = 30_000;
+
 // Context from the auth process, encrypted and stored inside the MCP token grant,
 // provided to the agent as this.props.
 export type Props = {
@@ -93,6 +97,7 @@ export async function exchangeGoogleCode({
 		return [null, new Response("Missing code", { status: 400 })];
 	}
 	const resp = await fetch("https://oauth2.googleapis.com/token", {
+		signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
 		method: "POST",
 		headers: { "Content-Type": "application/x-www-form-urlencoded" },
 		body: new URLSearchParams({
@@ -133,6 +138,7 @@ export async function refreshGoogleToken({
 	refresh_token: string;
 }): Promise<GoogleTokens> {
 	const resp = await fetch("https://oauth2.googleapis.com/token", {
+		signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
 		method: "POST",
 		headers: { "Content-Type": "application/x-www-form-urlencoded" },
 		body: new URLSearchParams({
@@ -154,6 +160,7 @@ export async function refreshGoogleToken({
 
 export async function fetchGoogleUserInfo(accessToken: string) {
 	const resp = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+		signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
 		headers: { Authorization: `Bearer ${accessToken}` },
 	});
 	if (!resp.ok) {
