@@ -5,6 +5,7 @@ import {
 	buildRfc822,
 	canonicalAddress,
 	decodeAttachmentText,
+	decodeEncodedWords,
 	escapeHtml,
 	extractBody,
 	forwardHeaderBlock,
@@ -1124,6 +1125,53 @@ describe("outgoing message ceilings", () => {
 	test("refuses an address header that cannot be folded", () => {
 		expect(() =>
 			buildRfc822({ to: `"${"a".repeat(1200)}" <a@example.com>`, subject: "s", body: "b" }),
+		).toThrow(/too long/);
+	});
+});
+
+describe("enclosed messages and encoded words", () => {
+	const b64 = (s: string) =>
+		btoa(String.fromCharCode(...new TextEncoder().encode(s)))
+			.replace(/\+/g, "-")
+			.replace(/\//g, "_")
+			.replace(/=+$/, "");
+
+	// An enclosed message need not be marked as an attachment to be one; the
+	// media type alone says its parts belong to a different message.
+	test("stops at an enclosed message that carries no filename", () => {
+		expect(
+			extractBody({
+				mimeType: "multipart/mixed",
+				parts: [
+					{
+						mimeType: "message/rfc822",
+						parts: [{ mimeType: "text/plain", body: { data: b64("enclosed text") } }],
+					},
+					{ mimeType: "text/plain", body: { data: b64("the real body") } },
+				],
+			}),
+		).toBe("the real body");
+	});
+
+	test("decodes an encoded word so a quote names the sender", () => {
+		expect(decodeEncodedWords("=?UTF-8?B?55Sw5Lit5aSq6YOO?= <t@example.com>")).toBe(
+			"田中太郎 <t@example.com>",
+		);
+		expect(decodeEncodedWords("=?UTF-8?Q?Pat_O=27Brien?=")).toBe("Pat O'Brien");
+		expect(decodeEncodedWords("plain text stays")).toBe("plain text stays");
+	});
+
+	// The name travels encoded, so its encoded length is what has to fit.
+	test("measures an attachment name after encoding, not before", () => {
+		expect(() =>
+			buildRfc822({
+				to: "a@example.com",
+				subject: "s",
+				body: "b",
+				attachments: [
+					{ filename: `${"あ".repeat(200)}.csv`, contentType: "text/csv", content: btoa("a,b") },
+				],
+			}),
 		).toThrow(/too long/);
 	});
 });

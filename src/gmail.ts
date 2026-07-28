@@ -18,6 +18,8 @@ const MAX_HEADER_RUN = 900;
 // once — the chunks, the joined bytes, the decoded string, the parsed object —
 // so the ceiling sits well below the isolate's own limit rather than near it.
 const MAX_RESPONSE_BYTES = 6_000_000;
+// How long a single Gmail call may take before it is abandoned.
+const GMAIL_TIMEOUT_MS = 30_000;
 
 // The parts of Gmail's message shape this server reads. Everything is optional
 // because the API omits fields by format and by message: a metadata read has no
@@ -58,8 +60,11 @@ export async function gmailFetch<T = unknown>(
 	init: RequestInit = {},
 	limit: number = MAX_RESPONSE_BYTES,
 ): Promise<T> {
+	// Nothing else bounds how long a call may hang, and a stalled one holds the
+	// session's object open behind it.
 	const resp = await fetch(`${BASE}${path}`, {
 		...init,
+		signal: AbortSignal.timeout(GMAIL_TIMEOUT_MS),
 		headers: {
 			Authorization: `Bearer ${accessToken}`,
 			"Content-Type": "application/json",
@@ -362,7 +367,8 @@ function assertPartHeaderFits(name: string, value: string): string {
 function filePart(p: FilePart): string[] {
 	assertHeaderSafe("attachment filename", p.filename);
 	const contentType = assertMediaType(p.contentType);
-	const params = filenameParams(assertPartHeaderFits("attachment filename", p.filename));
+	const params = filenameParams(p.filename);
+	assertPartHeaderFits("attachment filename", params.name + params.disposition);
 	return [
 		`Content-Type: ${contentType}; ${params.name}`,
 		"Content-Transfer-Encoding: base64",
@@ -628,6 +634,32 @@ export function forwardHtmlBlock(fields: {
 	].join("\n");
 }
 
+// RFC 2047 encoded words, as they arrive in From and Subject. Anything that is
+// not a well-formed word is left exactly as it was.
+export function decodeEncodedWords(value: string): string {
+	return value.replace(
+		/=\?([\w-]+)\?([BbQq])\?([^?]*)\?=/g,
+		(word, charset: string, encoding: string, text: string) => {
+			try {
+				const bytes =
+					encoding.toUpperCase() === "B"
+						? Uint8Array.from(atob(text), (ch) => ch.charCodeAt(0))
+						: Uint8Array.from(
+								text
+									.replace(/_/g, " ")
+									.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex: string) =>
+										String.fromCharCode(Number.parseInt(hex, 16)),
+									),
+								(ch) => ch.charCodeAt(0),
+							);
+				return new TextDecoder(charset).decode(bytes);
+			} catch {
+				return word;
+			}
+		},
+	);
+}
+
 export function quotePlain(from: string, date: string, body: string): string {
 	const quoted = body
 		.split("\n")
@@ -715,6 +747,10 @@ function htmlToText(html: string): string {
 // and the order parts arrive in is the sender's to choose.
 function isBodyPart(part: GmailPart): boolean {
 	if (part.filename) return false;
+	// An enclosed message brings a whole message with it. Its parts belong to
+	// that message, whether or not the enclosure was marked as an attachment.
+	const type = part.mimeType?.toLowerCase() ?? "";
+	if (type.startsWith("message/") || type === "multipart/digest") return false;
 	const disposition = part?.headers?.find(
 		(h) => h?.name?.toLowerCase() === "content-disposition",
 	)?.value;

@@ -7,6 +7,7 @@ import {
 	b64urlToStandard,
 	buildRfc822,
 	decodeAttachmentText,
+	decodeEncodedWords,
 	extractBody,
 	forwardHeaderBlock,
 	forwardHtmlBlock,
@@ -247,7 +248,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		// budget applies, so an oversized part is refused on its declared size
 		// rather than fetched and then trimmed.
 		if (ref.size > ATTACHMENT_BYTE_LIMIT) {
-			return `[body is ${ref.size} bytes, past the ${ATTACHMENT_BYTE_LIMIT}-byte limit; read it with get_attachment]`;
+			// get_attachment lists parts that carry a filename, and an externalized
+			// body carries none, so pointing there would be a dead end.
+			return `[the body of this message is ${ref.size} bytes, past the ${ATTACHMENT_BYTE_LIMIT}-byte limit this server reads; open the message in a mail client]`;
 		}
 		const att = await this.api<AttachmentBody>(
 			`/messages/${encodeURIComponent(m.id ?? "")}/attachments/${encodeURIComponent(ref.attachmentId)}`,
@@ -627,7 +630,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const references = [headerValue(original, "References"), messageIdHeader]
 					.filter(Boolean)
 					.join(" ");
-				const fromDisplay = headerValue(original, "From") ?? "unknown sender";
+				const fromDisplay = decodeEncodedWords(headerValue(original, "From") ?? "unknown sender");
 				const date = headerValue(original, "Date") ?? "an earlier date";
 				const originalBody = await this.messageBody(original);
 				const quoted = truncate(originalBody, THREAD_BODY_LIMIT);
@@ -828,7 +831,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				if (data.length > ATTACHMENT_INLINE_LIMIT) {
 					return this.text({
 						...meta,
-						error: `this attachment is ${part.size} bytes, too large to return inline; open it in a mail client`,
+						error: `this attachment encodes to ${data.length} characters, past the ${ATTACHMENT_INLINE_LIMIT} this server returns inline; open it in a mail client`,
 					});
 				}
 				return this.text({ ...meta, dataBase64Url: data });
