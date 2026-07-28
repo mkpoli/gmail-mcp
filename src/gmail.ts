@@ -8,6 +8,10 @@ const BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 // arrives and what gets copied during assembly.
 const MAX_ENCODED_ATTACHMENT_BYTES = 34_000_000;
 
+// RFC 5322 §2.1.1 caps a line at 998 octets. Folding breaks at spaces, so a
+// stretch without one has to fit a line on its own, allowing for the field name.
+const MAX_HEADER_RUN = 900;
+
 export class GmailApiError extends Error {
 	constructor(
 		public status: number,
@@ -72,6 +76,18 @@ export function b64urlEncode(s: string): string {
 function assertHeaderSafe(name: string, value: string): string {
 	if (/[\r\n\0]/.test(value)) {
 		throw new Error(`invalid ${name} header value: contains line break or NUL`);
+	}
+	return value;
+}
+
+// Text can travel as encoded-words, which break anywhere; a message id has to
+// stay literal, so a stretch of one without a space has to fit a line by
+// itself or it cannot be sent at all.
+function assertLiteralFits(name: string, value: string): string {
+	for (const run of value.split(" ")) {
+		if (run.length > MAX_HEADER_RUN) {
+			throw new Error(`${name} header value is too long to fit a header line`);
+		}
 	}
 	return value;
 }
@@ -347,8 +363,8 @@ export function buildRfc822({
 	if (bcc) assertHeaderSafe("Bcc", bcc);
 	if (from) assertHeaderSafe("From", from);
 	assertHeaderSafe("Subject", subject);
-	if (inReplyTo) assertHeaderSafe("In-Reply-To", inReplyTo);
-	if (references) assertHeaderSafe("References", references);
+	if (inReplyTo) assertLiteralFits("In-Reply-To", assertHeaderSafe("In-Reply-To", inReplyTo));
+	if (references) assertLiteralFits("References", assertHeaderSafe("References", references));
 	if (inlineImages.length > 0 && !htmlBody) {
 		throw new Error("inline images require an htmlBody that references their cid");
 	}

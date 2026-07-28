@@ -937,3 +937,27 @@ describe("header line limits and address groups", () => {
 		expect(parseAddresses("undisclosed-recipients:;")).toEqual([]);
 	});
 });
+
+describe("threading header length", () => {
+	// A msg-id cannot be encoded as words the way a subject can — it has to stay
+	// literal — so an over-long one is refused rather than folded into a line
+	// past the RFC 5322 limit.
+	test("refuses a Message-ID too long to fit a header line", () => {
+		const huge = `<${"a".repeat(1200)}@example.com>`;
+		expect(() =>
+			buildRfc822({ to: "a@example.com", subject: "s", body: "b", inReplyTo: huge }),
+		).toThrow(/too long/i);
+	});
+
+	test("keeps a References chain within the line limit by folding", () => {
+		const chain = Array.from({ length: 40 }, (_, i) => `<msg${i}@example.com>`).join(" ");
+		const raw = buildRfc822({
+			to: "a@example.com",
+			subject: "s",
+			body: "b",
+			inReplyTo: "<msg39@example.com>",
+			references: chain,
+		});
+		for (const line of raw.split("\r\n")) expect(line.length).toBeLessThanOrEqual(998);
+	});
+});

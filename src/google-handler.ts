@@ -37,6 +37,32 @@ const GOOGLE_SCOPE = [
 // isolate's memory.
 const MAX_APPROVAL_BODY_BYTES = 64 * 1024;
 
+// Reads a form body while counting what arrives, so a sender that declares no
+// length cannot decide how much memory it occupies.
+async function readBoundedForm(request: Request, limit: number): Promise<FormData> {
+	const reader = request.body?.getReader();
+	if (!reader) return new FormData();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > limit) {
+			await reader.cancel();
+			throw new Error("body too large");
+		}
+		chunks.push(value);
+	}
+	const body = new Uint8Array(total);
+	let at = 0;
+	for (const chunk of chunks) {
+		body.set(chunk, at);
+		at += chunk.byteLength;
+	}
+	return new Request(request.url, { method: "POST", headers: request.headers, body }).formData();
+}
+
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
 
 // The deployment documents itself: visiting the domain explains what this
@@ -109,15 +135,16 @@ app.get("/authorize", async (c) => {
 
 app.post("/authorize", async (c) => {
 	try {
-		// Anyone can post here, and the CSRF token being checked below travels in
-		// the body, so the body has to be read before it can be trusted. A real
-		// approval carries a state blob and a token; anything far larger is
-		// refused rather than buffered into the isolate.
-		const declared = Number.parseInt(c.req.header("content-length") ?? "", 10);
-		if (Number.isFinite(declared) && declared > MAX_APPROVAL_BODY_BYTES) {
+		// Anyone can post here, and the CSRF token checked below travels in the
+		// body, so the body has to be read before it can be trusted. It is read
+		// a chunk at a time against a ceiling rather than on a declared length,
+		// which a chunked request simply omits.
+		let formData: FormData;
+		try {
+			formData = await readBoundedForm(c.req.raw, MAX_APPROVAL_BODY_BYTES);
+		} catch {
 			return c.text("Request body too large", 413);
 		}
-		const formData = await c.req.raw.formData();
 		const csrfClearCookie = validateCSRFToken(formData, c.req.raw);
 
 		const encodedState = formData.get("state");
