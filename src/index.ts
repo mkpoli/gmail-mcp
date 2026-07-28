@@ -1027,9 +1027,13 @@ const mcpHandler = {
 		// reaches the client as an unexplained 500.
 		const sessionId = request.headers.get("mcp-session-id");
 		if (email && sessionId) {
+			// The props go with it: reaching a cold object starts it, and starting
+			// it builds the tool list from the account it belongs to. Without them
+			// it wakes with no identity and fails before it can answer.
 			const session = await getAgentByName<Env, GmailMCP>(
 				env.MCP_OBJECT,
 				`streamable-http:${sessionId}`,
+				{ props: ctx.props as Record<string, unknown> },
 			);
 			if (!(await session.isOwnedBy(email))) {
 				return new Response("this MCP session belongs to a different Google account", {
