@@ -248,7 +248,7 @@ Gmail本身用原生`fetch`直接调[REST API](https://developers.google.com/wor
 
 - **令牌始终是你的**。refresh token加密后放在各自的OAuth授权记录里，存在你自己的KV命名空间；有效期一小时的access token放在会话的Durable Object里。邮件从不存储，只是经过。
 - **一个会话，一个邮箱**。MCP会话绑定在开启它的账号上，一个邮箱的授权没法借着别处拿来的会话ID去操作另一个邮箱。
-- **scope从简。** `gmail.modify`涵盖读取、发送、标签和回收站，不含永久删除，也不含`gmail.settings.*`。自动转发规则、暗中转投邮件的过滤器，这两条经典邮箱后门，被盗的授权两样都够不到。
+- **scope从简。** `gmail.modify`涵盖读取、发送、标签和回收站，不含永久删除，也不含`gmail.settings.*`。自动转发规则、暗中转投邮件的过滤器，这两条经典邮箱后门，被盗的授权两样都够不到。另外还会申请`userinfo.email`和`userinfo.profile`，两个都是只读的，白名单和会话绑定靠它们知道登录的是哪个账号，它们碰不到邮件。
 - **信头夹带不进去**。所有出站信头的值只要含CR、LF或NUL就会被拒绝，参数没法越出自己的字段去追加一个信头，比如在主题里塞一个`Bcc`。媒体类型会校验，引用的原文会做HTML转义。但这不管参数本身：`bcc`是正经参数，模型如果听了正文里藏的指令，还是可能填进去，这一层由客户端的确认弹窗来把关。
 - **撤销有效**。收紧`ALLOWED_EMAILS`可以挡住新登录，在[myaccount.google.com/connections](https://myaccount.google.com/connections)撤销应用授权，或者轮换Google客户端密钥让所有授权一次失效。
 
