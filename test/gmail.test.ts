@@ -573,6 +573,15 @@ describe("normalizeMessageId", () => {
 		expect(normalizeMessageId("1932a1b2c3d4e5f6")).toBeNull();
 		expect(normalizeMessageId("")).toBeNull();
 	});
+
+	// A sender chooses their own Message-ID, and one too wide to fold onto a
+	// header line would otherwise reach the builder and fail every reply.
+	test("rejects an id too long for a header line", () => {
+		expect(normalizeMessageId(`<${"x".repeat(950)}@example.com>`)).toBeNull();
+		expect(normalizeMessageId(`<${"x".repeat(870)}@example.com>`)).toBe(
+			`<${"x".repeat(870)}@example.com>`,
+		);
+	});
 });
 
 describe("headerValue / summarizeMessage", () => {
@@ -722,6 +731,20 @@ describe("replyRecipients", () => {
 				replyTo: [],
 			}),
 		).toEqual({ to: ["alice@example.com"], cc: ["bob@example.com", "carol@example.com"] });
+	});
+
+	// One address wider than a header line reaches no mailbox and cannot be
+	// written into one, so it drops out and the others still get the reply.
+	test("drops an address too long for a header line", () => {
+		expect(
+			replyRecipients({
+				self,
+				from: [`${"x".repeat(950)}@example.com`, "alice@example.com"],
+				to: [self, `${"y".repeat(950)}@example.com`, "bob@example.com"],
+				cc: [],
+				replyTo: [],
+			}),
+		).toEqual({ to: ["alice@example.com"], cc: ["bob@example.com"] });
 	});
 
 	test("prefers Reply-To over From", () => {

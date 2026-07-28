@@ -252,6 +252,34 @@ describe("reply_all", () => {
 		expect(out.to).toEqual(["alice@example.com"]);
 		expect(out.cc).toEqual(["bob@example.com", "carol@example.com"]);
 	});
+
+	// Every threading value on the original is written by whoever sent it, and
+	// one too wide for a header line used to reach the builder and throw, so a
+	// crafted message could not be answered at all.
+	test("answers a message whose threading headers cannot be sent back", async () => {
+		const { handlers } = await boot();
+		const hostile = message("m1");
+		hostile.payload.headers = [
+			{ name: "From", value: `${"x".repeat(950)}@evil.example.com` },
+			{ name: "To", value: "me@example.com, bob@example.com" },
+			{ name: "Subject", value: "Quarterly report" },
+			{ name: "Message-ID", value: `<${"z".repeat(950)}@evil.example.com>` },
+			{ name: "References", value: `<${"w".repeat(950)}@evil.example.com> <real@example.com>` },
+		];
+		serveGmail([
+			[/\/messages\/m1\?format=full/, () => hostile],
+			[/\/messages\/send/, () => ({ id: "sent", threadId: "t-m1" })],
+		]);
+		const out = result(await tool(handlers, "reply_all")({ messageId: "m1", body: "ok" }));
+		expect(out.to).toEqual(["bob@example.com"]);
+
+		const sent = requests.find((r) => r.url.includes("/messages/send"));
+		const encoded = String((sent?.body as { raw?: string } | undefined)?.raw ?? "");
+		const mime = atob(encoded.replace(/-/g, "+").replace(/_/g, "/"));
+		expect(mime).toContain("References: <real@example.com>");
+		expect(mime).not.toContain("In-Reply-To:");
+		expect(mime).not.toContain("evil.example.com");
+	});
 });
 
 describe("get_attachment", () => {

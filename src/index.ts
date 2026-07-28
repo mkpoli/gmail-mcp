@@ -672,7 +672,13 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				// thread id still carries the reply into the conversation.
 				const originalMessageId = headerValue(original, "Message-ID");
 				const messageIdHeader = originalMessageId ? normalizeMessageId(originalMessageId) : null;
-				const references = [headerValue(original, "References"), messageIdHeader]
+				// The chain arrives from the sender too, and an id that fails the
+				// same check threads nothing on the receiving end, so carrying it
+				// would only cost the reply.
+				const references = [
+					...(headerValue(original, "References") ?? "").split(/\s+/).map(normalizeMessageId),
+					messageIdHeader,
+				]
 					.filter(Boolean)
 					.join(" ");
 				const fromDisplay = decodeEncodedWords(headerValue(original, "From") ?? "unknown sender");

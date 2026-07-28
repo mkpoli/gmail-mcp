@@ -160,11 +160,13 @@ function assertHeaderSafe(name: string, value: string): string {
 // Text can travel as encoded-words, which break anywhere; a message id has to
 // stay literal, so a stretch of one without a space has to fit a line by
 // itself or it cannot be sent at all.
+function fitsHeaderLine(value: string): boolean {
+	return value.split(" ").every((run) => run.length <= MAX_HEADER_RUN);
+}
+
 function assertLiteralFits(name: string, value: string): string {
-	for (const run of value.split(" ")) {
-		if (run.length > MAX_HEADER_RUN) {
-			throw new Error(`${name} header value is too long to fit a header line`);
-		}
+	if (!fitsHeaderLine(value)) {
+		throw new Error(`${name} header value is too long to fit a header line`);
 	}
 	return value;
 }
@@ -575,8 +577,13 @@ export function replyRecipients(fields: {
 }): { to: string[]; cc: string[] } {
 	const self = canonicalAddress(fields.self);
 	const notSelf = (a: string) => canonicalAddress(a) !== self;
-	const primary = (fields.replyTo.length > 0 ? fields.replyTo : fields.from).filter(notSelf);
-	const to = primary.length > 0 ? primary : fields.to.filter(notSelf);
+	// An address wider than a header line has nowhere to fold and cannot be
+	// sent. It arrived from the sender, and RFC 5321 caps a local part at 64
+	// octets, so it reaches no mailbox either: the reply goes to everyone else
+	// rather than failing for all of them.
+	const usable = (a: string) => notSelf(a) && fitsHeaderLine(a);
+	const primary = (fields.replyTo.length > 0 ? fields.replyTo : fields.from).filter(usable);
+	const to = primary.length > 0 ? primary : fields.to.filter(usable);
 	// Whether an address is this account is judged by where mail lands, but the
 	// overlap between To and Cc is judged as written: a tag is how its owner
 	// sorts their own mail, and folding it away would drop them from the reply.
@@ -584,7 +591,7 @@ export function replyRecipients(fields: {
 	const cc: string[] = [];
 	for (const address of [...fields.to, ...fields.cc]) {
 		const key = address.trim().toLowerCase();
-		if (!notSelf(address) || addressed.has(key)) continue;
+		if (!usable(address) || addressed.has(key)) continue;
 		addressed.add(key);
 		cc.push(address);
 	}
@@ -719,6 +726,10 @@ export function normalizeMessageId(value: string): string | null {
 	const bare = trimmed.startsWith("<") && trimmed.endsWith(">") ? trimmed.slice(1, -1) : trimmed;
 	// One id, with something either side of the @ and no space anywhere in it.
 	if (!/^[^\s<>@]+@[^\s<>@]+$/.test(bare)) return null;
+	// An id travels literally, so one past the width of a header line cannot be
+	// sent; a sender who writes one gets no threading rather than a reply that
+	// cannot be built at all.
+	if (bare.length + 2 > MAX_HEADER_RUN) return null;
 	return `<${bare}>`;
 }
 
