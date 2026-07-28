@@ -41,10 +41,10 @@ const THREAD_TOTAL_BUDGET = 30_000;
 // any bytes are fetched — base64 of a large file would otherwise be buffered
 // whole in the session's Durable Object before any cap could apply.
 const ATTACHMENT_BYTE_LIMIT = 1_500_000;
-// How long a session id stays bound to the account that opened it. Long enough
-// to outlast any real connection, short enough that abandoned ids do not
-// accumulate in KV for ever.
-const SESSION_OWNER_TTL = 60 * 60 * 24 * 7;
+// Carries the authenticated account from the OAuth boundary to the session
+// object. Set from the decrypted grant after any inbound copy is removed, so
+// what arrives at the object is what the OAuth layer authenticated.
+const ACCOUNT_HEADER = "x-gmail-mcp-account";
 
 const filePartSchema = z.object({
 	filename: z.string(),
@@ -64,6 +64,29 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		version: "0.1.0",
 	});
 
+	// The account this object serves, from the header the OAuth boundary stamps.
+	private callerAccount: string | null = null;
+
+	// A session belongs to the first account that opens it. Durable Object
+	// storage settles that here rather than in KV, whose writes take up to a
+	// minute to reach another location and resolve by last write — long enough
+	// for a second account to read no owner and be admitted.
+	override async fetch(request: Request): Promise<Response> {
+		const account = request.headers.get(ACCOUNT_HEADER)?.toLowerCase();
+		if (account) {
+			const owner = await this.ctx.storage.get<string>("owner");
+			if (owner === undefined) {
+				await this.ctx.storage.put("owner", account);
+			} else if (owner !== account) {
+				return new Response("this MCP session belongs to a different Google account", {
+					status: 403,
+				});
+			}
+			this.callerAccount = account;
+		}
+		return super.fetch(request);
+	}
+
 	// Access tokens live one hour; the refresh token from props mints new ones.
 	// The freshest token is kept in DO storage because props are immutable
 	// for the lifetime of the MCP grant.
@@ -80,11 +103,11 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	// comparison is only worth anything because the caller comes from the
 	// request rather than from the object's start-up state.
 	private async assertSessionOwner(): Promise<void> {
-		// The account is settled before the request reaches this object, so this
-		// is a second line rather than the first. It still catches the case where
-		// the object was evicted and woken by a different account, which leaves
-		// its identity in `this.props` while the recorded owner is unchanged.
-		const caller = this.grantProps.email.toLowerCase();
+		// The account was settled in fetch() above, against this object's own
+		// storage. This repeats the comparison for the identity the call is
+		// actually running under, and still catches a cold object woken by a
+		// different account, whose props would otherwise name that account.
+		const caller = this.callerAccount ?? this.grantProps.email.toLowerCase();
 		const owner = await this.ctx.storage.get<string>("owner");
 		if (owner === undefined) {
 			await this.ctx.storage.put("owner", caller);
@@ -887,22 +910,14 @@ const mcpAgent = GmailMCP.serve("/mcp{/:label}?") as {
 const mcpHandler = {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const email = (ctx.props as Props | undefined)?.email?.toLowerCase();
-		const sessionId = request.headers.get("mcp-session-id");
-		if (email && sessionId) {
-			const key = `session-owner:${sessionId}`;
-			const owner = await env.OAUTH_KV.get(key);
-			if (owner === null) {
-				await env.OAUTH_KV.put(key, email, { expirationTtl: SESSION_OWNER_TTL });
-			} else if (owner !== email) {
-				return new Response("this MCP session belongs to a different Google account", {
-					status: 403,
-				});
-			}
-		}
-		// The transport copies these headers on to the agent, so a client-supplied
-		// one would arrive looking exactly like an authenticated identity.
+		// The transport copies the request's headers on to the session object, so
+		// a client-supplied one would arrive there looking authenticated. Both are
+		// cleared first and the account is stamped from the grant the OAuth layer
+		// decrypted, which no client can choose.
 		const forwarded = new Request(request);
 		forwarded.headers.delete("x-partykit-props");
+		forwarded.headers.delete(ACCOUNT_HEADER);
+		if (email) forwarded.headers.set(ACCOUNT_HEADER, email);
 		return mcpAgent.fetch(forwarded, env, ctx);
 	},
 };
