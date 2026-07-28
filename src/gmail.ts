@@ -652,26 +652,35 @@ export function forwardHtmlBlock(fields: {
 // RFC 2047 encoded words, as they arrive in From and Subject. Anything that is
 // not a well-formed word is left exactly as it was.
 export function decodeEncodedWords(value: string): string {
-	return value.replace(
-		/=\?([\w-]+)\?([BbQq])\?([^?]*)\?=/g,
-		(word, charset: string, encoding: string, text: string) => {
-			try {
-				const bytes =
-					encoding.toUpperCase() === "B"
-						? Uint8Array.from(atob(text), (ch) => ch.charCodeAt(0))
-						: Uint8Array.from(
-								text
-									.replace(/_/g, " ")
-									.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex: string) =>
-										String.fromCharCode(Number.parseInt(hex, 16)),
-									),
-								(ch) => ch.charCodeAt(0),
-							);
-				return new TextDecoder(charset).decode(bytes);
-			} catch {
-				return word;
-			}
-		},
+	return (
+		value
+			// Whitespace between two encoded words separates them and is not part of
+			// the text (RFC 2047 §6.2). encodeHeader splits long values exactly this
+			// way, so leaving it in both corrupts what this module itself wrote and,
+			// when the separator is a fold, produces a line break the header guard
+			// then refuses.
+			.replace(/\?=[ \t]*(?:\r?\n[ \t]+)?(?==\?[\w-]+\?[BbQq]\?)/g, "?=")
+			.replace(
+				/=\?([\w-]+)\?([BbQq])\?([^?]*)\?=/g,
+				(word, charset: string, encoding: string, text: string) => {
+					try {
+						const bytes =
+							encoding.toUpperCase() === "B"
+								? Uint8Array.from(atob(text), (ch) => ch.charCodeAt(0))
+								: Uint8Array.from(
+										text
+											.replace(/_/g, " ")
+											.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex: string) =>
+												String.fromCharCode(Number.parseInt(hex, 16)),
+											),
+										(ch) => ch.charCodeAt(0),
+									);
+						return new TextDecoder(charset).decode(bytes);
+					} catch {
+						return word;
+					}
+				},
+			)
 	);
 }
 

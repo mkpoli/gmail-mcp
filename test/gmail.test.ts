@@ -1230,3 +1230,40 @@ describe("entities a sender controls", () => {
 		expect(html("<p>&#65;&#x42;&pound;</p>")).toBe("AB£");
 	});
 });
+
+describe("adjacent encoded words", () => {
+	const word = (s: string) =>
+		`=?UTF-8?B?${btoa(String.fromCharCode(...new TextEncoder().encode(s)))}?=`;
+
+	// RFC 2047 §6.2: whitespace separating two encoded words is not part of the
+	// text and a reader drops it. encodeHeader relies on that when it splits a
+	// long value, so the two have to agree or this module cannot read its own
+	// output back.
+	test("drops the whitespace that only separates them", () => {
+		expect(decodeEncodedWords(`${word("第三四半期の売上")} ${word("報告書について")}`)).toBe(
+			"第三四半期の売上報告書について",
+		);
+	});
+
+	test("drops a fold between them rather than emitting a line break", () => {
+		const decoded = decodeEncodedWords(`${word("abc")}\r\n ${word("def")}`);
+		expect(decoded).toBe("abcdef");
+		// A line break here would be refused by the header guard, so the send
+		// would fail rather than go out wrong.
+		expect(decoded).not.toMatch(/[\r\n]/);
+	});
+
+	test("keeps whitespace that belongs to the value", () => {
+		expect(decodeEncodedWords(`${word("山田")} <y@example.jp>`)).toBe("山田 <y@example.jp>");
+		expect(decodeEncodedWords(`${word("a")} plain ${word("b")}`)).toBe("a plain b");
+	});
+
+	test("round-trips what encodeHeader produces", () => {
+		const subject = "第三四半期の売上報告書について、確認をお願いいたします";
+		const raw = buildRfc822({ to: "a@example.com", subject, body: "b" });
+		const header = (raw.split("\r\n\r\n")[0] ?? "")
+			.split(/\r\n(?![ \t])/)
+			.find((l) => l.startsWith("Subject:"));
+		expect(decodeEncodedWords((header ?? "").slice("Subject: ".length))).toBe(subject);
+	});
+});
