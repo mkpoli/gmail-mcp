@@ -18,6 +18,7 @@ import {
 	parseAddresses,
 	quoteHtml,
 	quotePlain,
+	replyRecipients,
 	replySubject,
 	summarizeMessage,
 	textPartAttachment,
@@ -516,12 +517,13 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const ccAddrs = parseAddresses(headerValue(original, "Cc"));
 				const replyToHeader = parseAddresses(headerValue(original, "Reply-To"));
 
-				const primary = (replyToHeader.length > 0 ? replyToHeader : fromAddrs).filter(
-					(a) => a !== self,
-				);
-				const rest = [...toAddrs, ...ccAddrs].filter((a) => a !== self && !primary.includes(a));
-				// Replying to own sent mail: keep the original recipients.
-				const to = primary.length > 0 ? primary : toAddrs.filter((a) => a !== self);
+				const { to, cc: rest } = replyRecipients({
+					self,
+					from: fromAddrs,
+					to: toAddrs,
+					cc: ccAddrs,
+					replyTo: replyToHeader,
+				});
 				if (to.length === 0) {
 					throw new Error("reply_all found no recipient other than this account");
 				}

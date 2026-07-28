@@ -16,6 +16,7 @@ import {
 	parseAddresses,
 	quoteHtml,
 	quotePlain,
+	replyRecipients,
 	replySubject,
 	summarizeMessage,
 	textPartAttachment,
@@ -686,5 +687,59 @@ describe("b64urlToStandard", () => {
 			],
 		});
 		expect(raw).toContain("Content-Disposition: attachment");
+	});
+});
+
+describe("replyRecipients", () => {
+	const self = "me@example.com";
+
+	test("answers the sender and copies the rest", () => {
+		expect(
+			replyRecipients({
+				self,
+				from: ["alice@example.com"],
+				to: [self, "bob@example.com"],
+				cc: ["carol@example.com"],
+				replyTo: [],
+			}),
+		).toEqual({ to: ["alice@example.com"], cc: ["bob@example.com", "carol@example.com"] });
+	});
+
+	test("prefers Reply-To over From", () => {
+		const { to } = replyRecipients({
+			self,
+			from: ["alice@example.com"],
+			to: [self],
+			cc: [],
+			replyTo: ["list@example.org"],
+		});
+		expect(to).toEqual(["list@example.org"]);
+	});
+
+	// Replying to mail this account sent: the original recipients become the
+	// audience, and none of them may also appear as a carbon copy.
+	test("never addresses the same person twice", () => {
+		const { to, cc } = replyRecipients({
+			self,
+			from: [self],
+			to: ["bob@example.com"],
+			cc: ["carol@example.com"],
+			replyTo: [],
+		});
+		expect(to).toEqual(["bob@example.com"]);
+		expect(cc).toEqual(["carol@example.com"]);
+		expect(to.filter((a) => cc.includes(a))).toEqual([]);
+	});
+
+	test("drops the replying account from both lists", () => {
+		const { to, cc } = replyRecipients({
+			self,
+			from: ["alice@example.com"],
+			to: [self],
+			cc: [self],
+			replyTo: [],
+		});
+		expect(to).not.toContain(self);
+		expect(cc).not.toContain(self);
 	});
 });

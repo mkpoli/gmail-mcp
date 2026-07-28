@@ -395,6 +395,26 @@ export function parseAddresses(header: string | undefined): string[] {
 	return [...new Set(out)];
 }
 
+// Who a reply-all goes to. Reply-To wins over From when present; the account
+// replying drops out of both lists. Replying to mail this account sent leaves
+// no other sender to answer, so the original recipients become the audience —
+// and the carbon copies are whoever is left after that, or the same person
+// would be addressed twice.
+export function replyRecipients(fields: {
+	self: string;
+	from: string[];
+	to: string[];
+	cc: string[];
+	replyTo: string[];
+}): { to: string[]; cc: string[] } {
+	const self = fields.self.toLowerCase();
+	const notSelf = (a: string) => a !== self;
+	const primary = (fields.replyTo.length > 0 ? fields.replyTo : fields.from).filter(notSelf);
+	const to = primary.length > 0 ? primary : fields.to.filter(notSelf);
+	const cc = [...fields.to, ...fields.cc].filter((a) => notSelf(a) && !to.includes(a));
+	return { to, cc };
+}
+
 export function replySubject(original: string | undefined): string {
 	const s = original ?? "";
 	return /^\s*re:/i.test(s) ? s : `Re: ${s}`;
