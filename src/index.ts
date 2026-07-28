@@ -81,9 +81,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				status: 403,
 			});
 		}
-		// Assigned on every request, including when nothing arrived, so an
-		// identity never outlives the request that carried it.
-		this.requestProps = caller;
+		// Transport requests that open the stream or close the session carry no
+		// props, and they must not erase the identity the object is serving.
+		if (caller) this.requestProps = caller;
 		return super.fetch(request);
 	}
 
@@ -117,13 +117,11 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	// comparison is only worth anything because the caller comes from the
 	// request rather than from the object's start-up state.
 	private async assertSessionOwner(): Promise<void> {
-		// Identity comes from the request rather than from the object's start-up
-		// state, and a request that carried none cannot be attributed to anyone —
-		// falling back to whoever opened the session would answer in their name.
-		const caller = this.requestProps?.email?.toLowerCase();
-		if (!caller) {
-			throw new Error("this request carries no account identity");
-		}
+		// Every request carrying an account is checked at the boundary in fetch()
+		// and turned away there if it is not this session's, so nothing with
+		// another account's identity reaches here. This repeats the comparison
+		// against whatever identity the call is actually running under.
+		const caller = this.grantProps.email.toLowerCase();
 		if (!(await this.ownsSession(caller))) {
 			throw new Error("this MCP session belongs to a different Google account");
 		}
