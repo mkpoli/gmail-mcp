@@ -170,3 +170,32 @@ export async function fetchGoogleUserInfo(accessToken: string) {
 	// Only an explicit true counts: an absent field is not evidence of ownership.
 	return { email: info.email, verified: info.verified_email === true, name: info.name };
 }
+
+// A sender that declares no length would otherwise decide how much memory a
+// request occupies, so the body is counted as it arrives and refused part-way
+// rather than after it has all been held.
+export class BodyTooLarge extends Error {}
+
+export async function readBoundedBody(request: Request, limit: number): Promise<Uint8Array> {
+	const reader = request.body?.getReader();
+	if (!reader) return new Uint8Array();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > limit) {
+			await reader.cancel();
+			throw new BodyTooLarge();
+		}
+		chunks.push(value);
+	}
+	const body = new Uint8Array(total);
+	let at = 0;
+	for (const chunk of chunks) {
+		body.set(chunk, at);
+		at += chunk.byteLength;
+	}
+	return body;
+}

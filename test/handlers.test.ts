@@ -33,7 +33,7 @@ for (const name of [
 	mock.module(name, () => runtimeShim);
 }
 
-const { GmailMCP } = await import("../src/index");
+const { GmailMCP, default: worker } = await import("../src/index");
 
 type Handler = (args: Record<string, unknown>) => Promise<{ content: { text: string }[] }>;
 type Route = (url: string, init: RequestInit) => unknown;
@@ -570,4 +570,39 @@ describe("what a listing carries", () => {
 		expect(listed).not.toHaveProperty("data");
 		expect(JSON.stringify(out).length).toBeLessThan(5_000);
 	});
+});
+
+describe("the public OAuth endpoints", () => {
+	// A sender that omits Content-Length picks how much memory the request
+	// occupies, and neither endpoint asks for credentials first. What matters is
+	// that the refusal happens part-way, so the count is of what was pulled off
+	// the stream rather than of what was offered.
+	const CHUNK = 64 * 1024;
+	const streamed = (path: string, chunks: number) => {
+		let pulled = 0;
+		const request = new Request(`https://example.com${path}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new ReadableStream({
+				pull(controller) {
+					if (pulled >= chunks) return controller.close();
+					pulled += 1;
+					controller.enqueue(new Uint8Array(CHUNK));
+				},
+			}),
+			// @ts-expect-error required for a streamed body, absent from the DOM types
+			duplex: "half",
+		});
+		return { request, offered: () => pulled };
+	};
+
+	for (const path of ["/token", "/register"]) {
+		test(`stops reading a body too large to hold at ${path}`, async () => {
+			const { request, offered } = streamed(path, 512);
+			const response = await worker.fetch(request, {} as never, {} as never);
+			expect(response.status).toBe(413);
+			// 32 MiB was on offer; a couple of chunks is all it takes to know.
+			expect(offered()).toBeLessThan(8);
+		});
+	}
 });

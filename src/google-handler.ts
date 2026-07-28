@@ -3,6 +3,7 @@ import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provid
 import { Hono } from "hono";
 import setupGuide from "../docs/index.html";
 import {
+	BodyTooLarge,
 	exchangeGoogleCode,
 	fetchGoogleUserInfo,
 	getGoogleAuthorizeUrl,
@@ -10,6 +11,7 @@ import {
 	isUnderAccountCap,
 	type Props,
 	parseLimit,
+	readBoundedBody,
 } from "./utils";
 import {
 	addApprovedClient,
@@ -38,31 +40,8 @@ const GOOGLE_SCOPE = [
 // isolate's memory.
 const MAX_APPROVAL_BODY_BYTES = 64 * 1024;
 
-// Reads a form body while counting what arrives, so a sender that declares no
-// length cannot decide how much memory it occupies.
-class BodyTooLarge extends Error {}
-
 async function readBoundedForm(request: Request, limit: number): Promise<FormData> {
-	const reader = request.body?.getReader();
-	if (!reader) return new FormData();
-	const chunks: Uint8Array[] = [];
-	let total = 0;
-	for (;;) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		total += value.byteLength;
-		if (total > limit) {
-			await reader.cancel();
-			throw new BodyTooLarge();
-		}
-		chunks.push(value);
-	}
-	const body = new Uint8Array(total);
-	let at = 0;
-	for (const chunk of chunks) {
-		body.set(chunk, at);
-		at += chunk.byteLength;
-	}
+	const body = await readBoundedBody(request, limit);
 	return new Request(request.url, { method: "POST", headers: request.headers, body }).formData();
 }
 

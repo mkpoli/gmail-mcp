@@ -32,7 +32,7 @@ import {
 	truncate,
 } from "./gmail";
 import { GoogleHandler } from "./google-handler";
-import { type Props, refreshGoogleToken } from "./utils";
+import { BodyTooLarge, type Props, readBoundedBody, refreshGoogleToken } from "./utils";
 
 type TokenCache = { accessToken: string; expiresAt: number };
 
@@ -1149,7 +1149,7 @@ const mcpHandler = {
 // Both of these supply one; the declarations do not line up with a plain object.
 type ProviderHandler = { fetch: ExportedHandlerFetchHandler<unknown> };
 
-export default new OAuthProvider({
+const provider = new OAuthProvider({
 	apiHandlers: {
 		"/mcp": mcpHandler as unknown as ProviderHandler,
 	},
@@ -1161,3 +1161,34 @@ export default new OAuthProvider({
 	// cryptographic proof: plain PKCE offers none.
 	allowPlainPKCE: false,
 });
+
+// Both of these are open to anyone holding the URL, and the provider reads a
+// whole body before it measures one: the token endpoint hands it to formData()
+// with no ceiling, and registration compares Content-Length, which a chunked
+// sender simply omits. What arrives is counted here instead, where refusing it
+// costs nothing.
+const OAUTH_BODY_LIMIT = 64 * 1024;
+const BOUNDED_ENDPOINTS = new Set(["/token", "/register"]);
+
+export default {
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		if (request.method !== "POST" || !BOUNDED_ENDPOINTS.has(new URL(request.url).pathname)) {
+			return provider.fetch(request, env, ctx);
+		}
+		let body: Uint8Array;
+		try {
+			body = await readBoundedBody(request, OAUTH_BODY_LIMIT);
+		} catch (error: unknown) {
+			if (error instanceof BodyTooLarge) {
+				return new Response("Request body too large", { status: 413 });
+			}
+			throw error;
+		}
+		const bounded = new Request(request.url, {
+			method: "POST",
+			headers: request.headers,
+			body,
+		});
+		return provider.fetch(bounded, env, ctx);
+	},
+};
