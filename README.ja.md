@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#-できること)
-[![tests](https://img.shields.io/badge/tests-66_passing-success?logo=bun&logoColor=white)](#-テスト)
+[![tests](https://img.shields.io/badge/tests-87_passing-success?logo=bun&logoColor=white)](#-テスト)
 
 *[English README](./README.md) · [简体中文](./README.zh.md)*
 
@@ -232,7 +232,7 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 ## ✅ テスト
 
 
-66件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定を検証しています。
+87件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定を検証しています。
 
 実際のGmailアカウントの間でも、すべてのツールの動作を確認しました。
 
@@ -253,7 +253,7 @@ Gmailへのアクセスには[REST API](https://developers.google.com/workspace/
 ```sh
 bun run dev     # wrangler dev、:8788
 bun run check   # biome + tsc
-bun test        # 単体テスト66件
+bun test        # 単体テスト87件
 bun run assets  # ライト・ダークの図を再生成
 bun run deploy
 ```

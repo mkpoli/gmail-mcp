@@ -36,6 +36,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/check-render.py
 
+      - name: Tool and test counts match the source
+        run: python3 scripts/check-counts.py
+
       - name: Diagrams match their sources
         run: |
           bun run assets

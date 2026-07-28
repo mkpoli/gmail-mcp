@@ -12,7 +12,8 @@
 		"types": "wrangler types",
 		"setup": "bun run scripts/setup.ts",
 		"assets": "bun run scripts/render-assets.ts",
-		"check:render": "python3 scripts/check-render.py"
+		"check:render": "python3 scripts/check-render.py",
+		"check:counts": "python3 scripts/check-counts.py"
 	},
 	"dependencies": {
 		"@cloudflare/workers-oauth-provider": "^0.8.1",
