@@ -447,7 +447,12 @@ export function replyRecipients(fields: {
 	const notSelf = (a: string) => canonicalAddress(a) !== self;
 	const primary = (fields.replyTo.length > 0 ? fields.replyTo : fields.from).filter(notSelf);
 	const to = primary.length > 0 ? primary : fields.to.filter(notSelf);
-	const cc = [...fields.to, ...fields.cc].filter((a) => notSelf(a) && !to.includes(a));
+	// The same address can reach To and Cc in different spellings, so the overlap
+	// is judged the way self is rather than by string equality.
+	const addressed = new Set(to.map(canonicalAddress));
+	const cc = [...fields.to, ...fields.cc].filter(
+		(a) => notSelf(a) && !addressed.has(canonicalAddress(a)),
+	);
 	return { to, cc };
 }
 
@@ -625,9 +630,10 @@ export function textPartAttachment(
 	payload: any,
 ): { attachmentId: string; mimeType: string; charset: string; size: number } | null {
 	const parts = flattenParts(payload);
+	const bodies = parts.filter(isBodyPart);
 	const part =
-		parts.find((p) => p.mimeType === "text/plain" && p.body?.attachmentId && !p.filename) ??
-		parts.find((p) => p.mimeType === "text/html" && p.body?.attachmentId && !p.filename);
+		bodies.find((p) => p.mimeType === "text/plain" && p.body?.attachmentId) ??
+		bodies.find((p) => p.mimeType === "text/html" && p.body?.attachmentId);
 	if (!part) return null;
 	return {
 		attachmentId: part.body.attachmentId,

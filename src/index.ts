@@ -70,8 +70,34 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 	override async fetch(request: Request): Promise<Response> {
 		const encoded = request.headers.get("x-partykit-props");
-		if (encoded) this.requestProps = decodeRequestProps(encoded);
+		const caller = encoded ? decodeRequestProps(encoded) : null;
+		// One object serves one account, so an account that does not own this
+		// session is turned away before it can touch anything the owner's
+		// in-flight requests read. Requests interleave at every await, and the
+		// field below is shared between them: letting a stranger write it would
+		// hand its identity to work already under way for someone else.
+		if (caller && !(await this.ownsSession(caller.email))) {
+			return new Response("this MCP session belongs to a different Google account", {
+				status: 403,
+			});
+		}
+		// Assigned on every request, including when nothing arrived, so an
+		// identity never outlives the request that carried it.
+		this.requestProps = caller;
 		return super.fetch(request);
+	}
+
+	// True once the session belongs to this account, claiming it if it is still
+	// unclaimed. The read and the write are not separated by an await, so two
+	// arrivals cannot both see it unclaimed.
+	private async ownsSession(email: string): Promise<boolean> {
+		const caller = email.toLowerCase();
+		const owner = await this.ctx.storage.get<string>("owner");
+		if (owner === undefined) {
+			await this.ctx.storage.put("owner", caller);
+			return true;
+		}
+		return owner === caller;
 	}
 
 	// Access tokens live one hour; the refresh token from props mints new ones.
@@ -91,13 +117,14 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	// comparison is only worth anything because the caller comes from the
 	// request rather than from the object's start-up state.
 	private async assertSessionOwner(): Promise<void> {
-		const caller = this.grantProps.email.toLowerCase();
-		const owner = await this.ctx.storage.get<string>("owner");
-		if (owner === undefined) {
-			await this.ctx.storage.put("owner", caller);
-			return;
+		// Identity comes from the request rather than from the object's start-up
+		// state, and a request that carried none cannot be attributed to anyone —
+		// falling back to whoever opened the session would answer in their name.
+		const caller = this.requestProps?.email?.toLowerCase();
+		if (!caller) {
+			throw new Error("this request carries no account identity");
 		}
-		if (owner !== caller) {
+		if (!(await this.ownsSession(caller))) {
 			throw new Error("this MCP session belongs to a different Google account");
 		}
 	}

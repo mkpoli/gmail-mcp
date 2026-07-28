@@ -875,3 +875,36 @@ describe("outgoing size ceiling", () => {
 		).not.toThrow();
 	});
 });
+
+describe("recipient and body selection, alias-aware", () => {
+	// The overlap between To and Cc has to be judged the same way self is, or an
+	// alias of a To recipient still lands in Cc.
+	test("does not copy an alias of someone already addressed", () => {
+		const { to, cc } = replyRecipients({
+			self: "me@example.com",
+			from: ["User+tag1@example.com"],
+			to: ["user@example.com", "bob@example.com"],
+			cc: ["USER@example.com"],
+			replyTo: [],
+		});
+		expect(to).toEqual(["User+tag1@example.com"]);
+		expect(cc).toEqual(["bob@example.com"]);
+	});
+
+	// The externalized-body fallback has to judge attachments the same way the
+	// inline path does, or a disposition-marked file becomes the body.
+	test("does not treat a disposition-marked part as an externalized body", () => {
+		expect(
+			textPartAttachment({
+				mimeType: "multipart/mixed",
+				parts: [
+					{
+						mimeType: "text/plain",
+						headers: [{ name: "Content-Disposition", value: "attachment" }],
+						body: { attachmentId: "file-att", size: 10 },
+					},
+				],
+			}),
+		).toBeNull();
+	});
+});
