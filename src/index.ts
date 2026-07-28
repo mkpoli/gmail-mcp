@@ -75,6 +75,8 @@ const ACCOUNT_HEADER = "x-gmail-mcp-account";
 const SUMMARY_HEADERS = ["From", "To", "Cc", "Subject", "Date"] as const;
 // How long the account's send-as identities are trusted before being read again.
 const SEND_AS_TTL_MS = 24 * 60 * 60 * 1000;
+// What the MCP transport itself allows a single message to be.
+const MCP_MESSAGE_LIMIT = 4 * 1024 * 1024;
 
 const filePartSchema = z.object({
 	filename: z.string(),
@@ -1215,10 +1217,20 @@ const provider = new OAuthProvider({
 const OAUTH_BODY_LIMIT = 64 * 1024;
 const BOUNDED_ENDPOINTS = new Set(["/token", "/register"]);
 
+// What a POST to each path may carry. The MCP transport refuses an oversized
+// message by its declared length, which a sender omits by streaming, so the
+// same ceiling is applied to what actually arrives.
+function bodyLimitFor(path: string): number | null {
+	if (BOUNDED_ENDPOINTS.has(path)) return OAUTH_BODY_LIMIT;
+	if (path === "/mcp" || path.startsWith("/mcp/")) return MCP_MESSAGE_LIMIT;
+	return null;
+}
+
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const path = new URL(request.url).pathname;
-		if (request.method !== "POST" || !BOUNDED_ENDPOINTS.has(path)) {
+		const limit = request.method === "POST" ? bodyLimitFor(path) : null;
+		if (limit === null) {
 			return provider.fetch(request, env, ctx);
 		}
 		// Registration needs no credentials and spends a KV write, which is the
@@ -1233,7 +1245,7 @@ export default {
 		}
 		let body: Uint8Array;
 		try {
-			body = await readBoundedBody(request, OAUTH_BODY_LIMIT);
+			body = await readBoundedBody(request, limit);
 		} catch (error: unknown) {
 			if (error instanceof BodyTooLarge) {
 				return new Response("Request body too large", { status: 413 });

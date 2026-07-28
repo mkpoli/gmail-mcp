@@ -747,6 +747,16 @@ describe("the public OAuth endpoints", () => {
 		expect(asked).toEqual(["203.0.113.9", "203.0.113.9"]);
 	});
 
+	// The MCP endpoint has a ceiling of its own, and a streamed message slips
+	// past it the same way. This one needs a grant, so it is reached only by
+	// someone already allowed to connect.
+	test("stops reading an oversized MCP message", async () => {
+		const { request, offered } = streamed("/mcp", 128);
+		const response = await worker.fetch(request, {} as never, {} as never);
+		expect(response.status).toBe(413);
+		expect(offered()).toBeLessThan(80);
+	});
+
 	for (const path of ["/token", "/register"]) {
 		test(`stops reading a body too large to hold at ${path}`, async () => {
 			const { request, offered } = streamed(path, 512);
