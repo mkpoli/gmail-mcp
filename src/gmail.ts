@@ -90,6 +90,8 @@ export async function gmailFetch<T = unknown>(
 		}
 		chunks.push(value);
 	}
+	// A success with nothing in it is a success, not malformed JSON.
+	if (total === 0) return null as T;
 	const body = new Uint8Array(total);
 	let at = 0;
 	for (const chunk of chunks) {

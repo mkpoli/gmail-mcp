@@ -1059,3 +1059,21 @@ describe("normalizeMessageId strictness", () => {
 		expect(normalizeMessageId("CAB1@mail.gmail.com")).toBe("<CAB1@mail.gmail.com>");
 	});
 });
+
+describe("gmailFetch empty responses", () => {
+	const realFetch = globalThis.fetch;
+	afterEach(() => {
+		globalThis.fetch = realFetch;
+	});
+
+	// Some writes answer with a success and no body. Parsing that as JSON turns
+	// a completed action into an error the caller cannot interpret.
+	test.each([
+		["an empty 200", new Response("", { status: 200 })],
+		["a null-bodied 200", new Response(null, { status: 200 })],
+		["a 204", new Response(null, { status: 204 })],
+	])("returns nothing for %s", async (_name, response) => {
+		globalThis.fetch = (async () => response) as unknown as typeof fetch;
+		expect(await gmailFetch("tok", "/threads/x/trash", { method: "POST" })).toBeNull();
+	});
+});
