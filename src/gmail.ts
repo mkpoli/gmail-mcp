@@ -380,11 +380,22 @@ function filePart(p: FilePart): string[] {
 	assertHeaderSafe("attachment filename", p.filename);
 	const contentType = assertMediaType(p.contentType);
 	const params = filenameParams(p.filename);
-	assertPartHeaderFits("attachment filename", params.name + params.disposition);
-	return [
+	// The two parameters land on separate lines, so each is measured on its
+	// own. A name outside ASCII is percent-encoded into three characters a
+	// byte, and measuring the pair together refused ordinary Japanese and
+	// Chinese filenames whose headers would have been well inside the limit.
+	const type = assertPartHeaderFits(
+		"attachment filename",
 		`Content-Type: ${contentType}; ${params.name}`,
-		"Content-Transfer-Encoding: base64",
+	);
+	const disposition = assertPartHeaderFits(
+		"attachment filename",
 		`Content-Disposition: attachment; ${params.disposition}`,
+	);
+	return [
+		type,
+		"Content-Transfer-Encoding: base64",
+		disposition,
 		"",
 		normalizeB64(`attachment ${p.filename}`, p.content),
 	];

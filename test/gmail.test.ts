@@ -299,6 +299,23 @@ describe("buildRfc822", () => {
 		expect(raw).toMatch(/Content-Type: text\/csv; name="=\?UTF-8\?B\?/);
 	});
 
+	// A filesystem allows a 255-byte name, which is 85 kana. Percent-encoding
+	// spends three characters a byte, so the disposition parameter is long
+	// while the legacy name parameter beside it stays short; measuring the two
+	// together refused names this size on ordinary Japanese and Chinese mail.
+	test("sends an attachment named to the filesystem limit", () => {
+		const raw = buildRfc822({
+			to: "a@example.com",
+			subject: "s",
+			body: "b",
+			attachments: [{ filename: "あ".repeat(85), contentType: "text/csv", content: btoa("a,b") }],
+		});
+		const longest = Math.max(
+			...raw.split("\r\n").map((line) => new TextEncoder().encode(line).length),
+		);
+		expect(longest).toBeLessThanOrEqual(998);
+	});
+
 	test("keeps a plain filename unencoded", () => {
 		const raw = buildRfc822({
 			to: "a@example.com",
