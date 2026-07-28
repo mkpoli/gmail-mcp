@@ -170,10 +170,10 @@ describe("session ownership", () => {
 		expect(storage.get("owner")).toBe("owner@example.com");
 	});
 
-	// The framework writes a request's props onto the object before any check
-	// here can refuse the request, so a foreign grant reaching a live session
-	// replaces the credentials a call in flight is about to read. What that call
-	// sends has to belong to the owner or it reaches the wrong mailbox.
+	// An object started by a foreign grant holds that account's credentials for
+	// as long as it lives, while storage still names the owner. The owner's own
+	// calls then pass the caller check and would reach the wrong mailbox, so
+	// what they send has to be settled against the owner too.
 	test("refuses credentials that no longer belong to the owner", async () => {
 		const { agent, handlers } = await boot("owner@example.com");
 		serveGmail([[/\/profile/, () => ({ emailAddress: "owner@example.com" })]]);

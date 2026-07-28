@@ -134,11 +134,12 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		return this.props;
 	}
 
-	// A request naming a different account replaces this object's props on the
-	// way in — the framework writes them before any code here can refuse the
-	// request, on a warm instance as much as a cold one. A call already in
-	// flight would then read whatever arrived, so credentials are taken against
-	// the account recorded in storage rather than trusted for being present.
+	// Props are bound once, when the object starts, from whichever grant woke
+	// it — a later request carrying a different account does not replace them.
+	// So a session claimed by one account can be started by another's grant,
+	// leaving credentials here that name someone else. Which account they are
+	// for is settled against the owner in storage rather than assumed from
+	// their being present.
 	private async ownerProps(): Promise<Props> {
 		const owner = await this.ctx.storage.get<string>("owner");
 		const props = this.grantProps;
