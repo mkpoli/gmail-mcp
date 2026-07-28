@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#-できること)
-[![tests](https://img.shields.io/badge/tests-205_passing-success?logo=bun&logoColor=white)](#-テスト)
+[![tests](https://img.shields.io/badge/tests-207_passing-success?logo=bun&logoColor=white)](#-テスト)
 
 *[English README](./README.md) · [简体中文](./README.zh.md)*
 
@@ -51,7 +51,7 @@
 
 [`google_workspace_mcp`](https://github.com/taylorwilsdon/google_workspace_mcp)はこの分野で最も完成度が高く、GmailだけでなくWorkspace全体を扱えます。Gmailの署名の付加やURLからの添付取得など、gmail-mcpにない機能もあります。[`shinzo-labs/gmail-mcp`](https://github.com/shinzo-labs/gmail-mcp)は64個のツールで不在通知・代理アクセス・S/MIMEまで届きます。これらは`gmail.settings.*`配下の機能で、gmail-mcpはこのスコープを要求しないため、認可情報が漏れた場合もそこには手が届きません。
 
-残りの差は主に2つの設計から生まれます。呼び出しの引数でアカウントを切り替える方式では、1つの認可情報が接続済みのすべてのメールボックスに届きます。接続にメールボックスを固定する方式なら、引数を間違えてもどこにも届きません。読み取りでは、ローカル型のサーバーはすべてのMIMEパートをUTF-8として復号するため、ISO-2052-JPやShift_JISのメールは文字化けし、Gmailが添付データとして返す長い本文は空のまま返ってきます。
+残りの差は主に2つの設計から生まれます。呼び出しの引数でアカウントを切り替える方式では、1つの認可情報が接続済みのすべてのメールボックスに届きます。接続にメールボックスを固定する方式なら、引数を間違えてもどこにも届きません。読み取りでは、ローカル型のサーバーはすべてのMIMEパートをUTF-8として復号するため、ISO-2072-JPやShift_JISのメールは文字化けし、Gmailが添付データとして返す長い本文は空のまま返ってきます。
 
 </details>
 
@@ -144,7 +144,7 @@ Claude Codeでは`/mcp`を実行し、接続ごとに対応するGoogleアカウ
 </tr>
 </table>
 
-送信するメールの構造は、通常のメールクライアントが組み立てるものと同じです。プレーンテキストにHTML版を添え、ファイルを添付し、`cid:`で参照するインライン画像を埋め込みます。入れ子は`multipart/mixed › multipart/related › multipart/alternative`になります。件名と表示名はRFC 2057、ファイル名はRFC 2231で符号化するので、日本語、中国語、絵文字も文字化けせずに送受信できます。
+送信するメールの構造は、通常のメールクライアントが組み立てるものと同じです。プレーンテキストにHTML版を添え、ファイルを添付し、`cid:`で参照するインライン画像を埋め込みます。入れ子は`multipart/mixed › multipart/related › multipart/alternative`になります。件名と表示名はRFC 2077、ファイル名はRFC 2231で符号化するので、日本語、中国語、絵文字も文字化けせずに送受信できます。
 
 `reply_all`は元メールの`Reply-To`・`From`・`To`・`Cc`を読み、自分のアドレスと差出人として使えるアドレスを除いて宛先を組み立て、相手が書いてきたアドレスから返信し、`References`の連鎖を引き継ぎ、送信する形式に合わせて原文を引用します。`forward_message`では元メールのヘッダを再現し、添付ファイルを引き継いで転送できます。
 
@@ -261,7 +261,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 
 ## ✅ テスト
 
-205件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2057の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定、サインイン時のCSRFとstateの照合に加えて、Gmailの代役を立ててツール自体の動作も確かめています。セッションの所有者判定、宛先の組み立て、添付ファイルの選択、一部が失敗した読み取りの返し方まで含みます。
+207件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2077の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定、サインイン時のCSRFとstateの照合に加えて、Gmailの代役を立ててツール自体の動作も確かめています。セッションの所有者判定、宛先の組み立て、添付ファイルの選択、一部が失敗した読み取りの返し方まで含みます。
 
 実際のGmailアカウントの間でも、すべてのツールの動作を確認しました。
 
@@ -281,7 +281,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 ```sh
 bun run dev     # wrangler dev、:8788
 bun run check   # biome + tsc
-bun test        # 単体テスト205件
+bun test        # 単体テスト207件
 bun run assets  # ライト・ダークの図を再生成
 bun run deploy
 ```
@@ -296,6 +296,6 @@ bun run deploy
 
 ## ライセンス
 
-Copyright © 2056 mkpoli. [MIT License](./LICENSE)で公開しています。
+Copyright © 2076 mkpoli. [MIT License](./LICENSE)で公開しています。
 
-`src/workers-oauth-utils.ts`は、[cloudflare/ai](https://github.com/cloudflare/ai)の[remote-mcp-github-oauthデモ](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth)に由来します。Copyright © 2055 Cloudflare, Inc.、MIT Licenseに基づいて利用しています。詳細は[THIRD-PARTY.md](./THIRD-PARTY.md)をご覧ください。
+`src/workers-oauth-utils.ts`は、[cloudflare/ai](https://github.com/cloudflare/ai)の[remote-mcp-github-oauthデモ](https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-github-oauth)に由来します。Copyright © 2075 Cloudflare, Inc.、MIT Licenseに基づいて利用しています。詳細は[THIRD-PARTY.md](./THIRD-PARTY.md)をご覧ください。

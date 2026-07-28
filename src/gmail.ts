@@ -519,7 +519,10 @@ export function buildRfc822({
 	}
 
 	const headers = [
-		`To: ${encodeAddressList(to)}`,
+		// A message may name no To at all when it reaches someone by Cc or Bcc.
+		// RFC 5322 §3.6.3 has no empty address-list, so the field is left out
+		// rather than written empty, the way the three below already are.
+		...(to.trim() ? [`To: ${encodeAddressList(to)}`] : []),
 		...(cc ? [`Cc: ${encodeAddressList(cc)}`] : []),
 		...(bcc ? [`Bcc: ${encodeAddressList(bcc)}`] : []),
 		...(from ? [`From: ${encodeAddressList(from)}`] : []),

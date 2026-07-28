@@ -449,6 +449,27 @@ describe("extractBody", () => {
 	});
 });
 
+describe("a message addressed only by Bcc", () => {
+	// The builder admits mail that names no To, and an announcement sent
+	// privately to a list is ordinary mail. What went out was an empty field,
+	// which RFC 5322 §3.6.3 does not allow.
+	test("leaves the To field out rather than writing it empty", () => {
+		const raw = buildRfc822({ to: "", bcc: "a@example.com", subject: "s", body: "b" });
+		expect(raw).not.toContain("To: \r\n");
+		expect(raw).toContain("Bcc: a@example.com");
+	});
+
+	test("still writes To when there is one", () => {
+		const raw = buildRfc822({
+			to: "a@example.com",
+			cc: "c@example.com",
+			subject: "s",
+			body: "b",
+		});
+		expect(raw).toContain("To: a@example.com");
+	});
+});
+
 describe("partCharset", () => {
 	// A sender may put whitespace either side of a parameter's "=", and reading
 	// the part as UTF-8 hands back the escape sequences rather than the text.
