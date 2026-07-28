@@ -471,6 +471,31 @@ describe("a subject that arrives carrying a line break", () => {
 	});
 });
 
+describe("a display name too long to fold", () => {
+	// A name carrying a comma is quoted, and the folder never breaks inside a
+	// quoted string. Judging it by its spaces called it foldable while the
+	// folder kept it whole, and the line written had nowhere to break.
+	test("refuses one that would run past the limit", () => {
+		const name = `Doe, ${Array.from({ length: 400 }, (_, i) => `w${i}`).join(" ")}`;
+		expect(() => buildRfc822({ to: `"${name}" <x@example.com>`, subject: "s", body: "b" })).toThrow(
+			/too long to fit a header line/,
+		);
+	});
+
+	test("keeps sending an ordinary quoted name", () => {
+		const raw = buildRfc822({
+			to: '"Smith, John Q." <john@example.com>, "O\'Brien, Ann" <ann@example.com>',
+			subject: "s",
+			body: "b",
+		});
+		const longest = Math.max(
+			...raw.split("\r\n").map((line) => new TextEncoder().encode(line).length),
+		);
+		expect(longest).toBeLessThanOrEqual(998);
+		expect(raw).toContain("Smith, John Q.");
+	});
+});
+
 describe("a header value whose quotes do not balance", () => {
 	// Folding keeps a quoted string whole, so one stray quote used to swallow
 	// everything after it into a string with no end and no place to break.

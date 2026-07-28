@@ -163,8 +163,35 @@ function assertHeaderSafe(name: string, value: string): string {
 // Text can travel as encoded-words, which break anywhere; a message id has to
 // stay literal, so a stretch of one without a space has to fit a line by
 // itself or it cannot be sent at all.
+// Where a header line may be broken: at a space outside a quoted string. One
+// stray quote would open a string that never closes, so the quotes are honoured
+// only when they balance.
+function headerRuns(value: string): string[] {
+	const split = (respectQuotes: boolean): string[] => {
+		const out: string[] = [];
+		let buffer = "";
+		let quoted = false;
+		for (let i = 0; i < value.length; i++) {
+			const ch = value[i];
+			if (respectQuotes && ch === '"' && value[i - 1] !== "\\") quoted = !quoted;
+			if (ch === " " && !quoted) {
+				out.push(buffer);
+				buffer = "";
+				continue;
+			}
+			buffer += ch;
+		}
+		out.push(buffer);
+		return quoted ? split(false) : out;
+	};
+	return split(true);
+}
+
+// Measured the way the folder breaks, or the two disagree: a quoted display
+// name full of spaces looks foldable run by run while the folder keeps it
+// whole, and the line it writes has nowhere to break.
 function fitsHeaderLine(value: string): boolean {
-	return value.split(" ").every((run) => run.length <= MAX_HEADER_RUN);
+	return headerRuns(value).every((run) => run.length <= MAX_HEADER_RUN);
 }
 
 function assertLiteralFits(name: string, value: string): string {
@@ -286,28 +313,7 @@ function foldHeader(line: string): string {
 function foldSegment(line: string, LIMIT: number): string {
 	if (line.length <= LIMIT) return line;
 
-	// A break may not land inside a quoted string, so the spaces there are kept
-	// whole. One stray quote would otherwise open a string that never closes,
-	// leaving the rest of the value with nowhere to fold and a line past the
-	// limit; when the quotes do not balance there is no string to protect.
-	const split = (respectQuotes: boolean): string[] => {
-		const out: string[] = [];
-		let buffer = "";
-		let quoted = false;
-		for (let i = 0; i < line.length; i++) {
-			const ch = line[i];
-			if (respectQuotes && ch === '"' && line[i - 1] !== "\\") quoted = !quoted;
-			if (ch === " " && !quoted) {
-				out.push(buffer);
-				buffer = "";
-				continue;
-			}
-			buffer += ch;
-		}
-		out.push(buffer);
-		return quoted ? split(false) : out;
-	};
-	const tokens = split(true);
+	const tokens = headerRuns(line);
 
 	const lines: string[] = [];
 	let current = "";
