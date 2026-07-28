@@ -395,6 +395,25 @@ export function parseAddresses(header: string | undefined): string[] {
 	return [...new Set(out)];
 }
 
+// Gmail delivers to one mailbox whatever tag or dots an address carries, so a
+// reply has to recognise those forms as the account itself instead of copying
+// them back to their owner. Dots fold away on gmail.com and its googlemail.com
+// alias; on a Workspace domain they are part of the address and stay.
+export function canonicalAddress(address: string): string {
+	const at = address.lastIndexOf("@");
+	if (at < 0) return address.trim().toLowerCase();
+	let local = address.slice(0, at).trim().toLowerCase();
+	let domain = address
+		.slice(at + 1)
+		.trim()
+		.toLowerCase();
+	const tag = local.indexOf("+");
+	if (tag >= 0) local = local.slice(0, tag);
+	if (domain === "googlemail.com") domain = "gmail.com";
+	if (domain === "gmail.com") local = local.replaceAll(".", "");
+	return `${local}@${domain}`;
+}
+
 // Who a reply-all goes to. Reply-To wins over From when present; the account
 // replying drops out of both lists. Replying to mail this account sent leaves
 // no other sender to answer, so the original recipients become the audience —
@@ -407,8 +426,8 @@ export function replyRecipients(fields: {
 	cc: string[];
 	replyTo: string[];
 }): { to: string[]; cc: string[] } {
-	const self = fields.self.toLowerCase();
-	const notSelf = (a: string) => a !== self;
+	const self = canonicalAddress(fields.self);
+	const notSelf = (a: string) => canonicalAddress(a) !== self;
 	const primary = (fields.replyTo.length > 0 ? fields.replyTo : fields.from).filter(notSelf);
 	const to = primary.length > 0 ? primary : fields.to.filter(notSelf);
 	const cc = [...fields.to, ...fields.cc].filter((a) => notSelf(a) && !to.includes(a));

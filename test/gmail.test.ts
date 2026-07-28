@@ -3,6 +3,7 @@ import {
 	b64urlEncode,
 	b64urlToStandard,
 	buildRfc822,
+	canonicalAddress,
 	decodeAttachmentText,
 	escapeHtml,
 	extractBody,
@@ -789,5 +790,48 @@ describe("extractBody attachment handling", () => {
 		expect(extractBody({ mimeType: "text/plain", body: { data: b64("just the body") } })).toBe(
 			"just the body",
 		);
+	});
+});
+
+describe("canonicalAddress", () => {
+	test("folds a plus tag away", () => {
+		expect(canonicalAddress("john+alerts@example.com")).toBe("john@example.com");
+	});
+
+	// Dots are insignificant on Gmail's own domains and significant everywhere
+	// else, so a Workspace address must keep them.
+	test("folds dots only on Gmail's own domains", () => {
+		expect(canonicalAddress("john.smith@gmail.com")).toBe("johnsmith@gmail.com");
+		expect(canonicalAddress("john.smith@googlemail.com")).toBe("johnsmith@gmail.com");
+		expect(canonicalAddress("john.smith@company.com")).toBe("john.smith@company.com");
+	});
+
+	test("lowercases and leaves an ordinary address alone", () => {
+		expect(canonicalAddress("Bob@Example.COM")).toBe("bob@example.com");
+	});
+});
+
+describe("replyRecipients with aliases", () => {
+	test("does not copy the replying account's own plus alias", () => {
+		const { to, cc } = replyRecipients({
+			self: "john.smith@gmail.com",
+			from: ["alice@example.com"],
+			to: ["john.smith+alerts@gmail.com", "bob@example.com"],
+			cc: ["johnsmith@gmail.com"],
+			replyTo: [],
+		});
+		expect(to).toEqual(["alice@example.com"]);
+		expect(cc).toEqual(["bob@example.com"]);
+	});
+
+	test("keeps a lookalike address on a different domain", () => {
+		const { cc } = replyRecipients({
+			self: "john.smith@gmail.com",
+			from: ["alice@example.com"],
+			to: ["john.smith@company.com"],
+			cc: [],
+			replyTo: [],
+		});
+		expect(cc).toEqual(["john.smith@company.com"]);
 	});
 });
