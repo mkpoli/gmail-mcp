@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#能做什么)
-[![tests](https://img.shields.io/badge/tests-87_passing-success?logo=bun&logoColor=white)](#测试)
+[![tests](https://img.shields.io/badge/tests-104_passing-success?logo=bun&logoColor=white)](#测试)
 
 *[English README](./README.md) · [日本語版](./README.ja.md)*
 
@@ -258,7 +258,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 
 ## 测试
 
-87个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单。
+104个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，以及登录流程里的CSRF和state校验。
 
 另外，所有工具都在真实Gmail账号上跑过，再用另一个账号检查收到的东西：
 
@@ -278,7 +278,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 ```sh
 bun run dev     # wrangler dev，端口8788
 bun run check   # biome + tsc
-bun test        # 87个单元测试
+bun test        # 104个单元测试
 bun run assets  # 重新生成明暗两套图示
 bun run deploy
 ```
