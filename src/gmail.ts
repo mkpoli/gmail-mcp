@@ -653,17 +653,6 @@ function decodePartData(part: GmailPart): string {
 	}
 }
 
-function flattenParts(payload: GmailPart | undefined): GmailPart[] {
-	const parts: GmailPart[] = [];
-	const walk = (p: GmailPart | undefined) => {
-		if (!p) return;
-		parts.push(p);
-		(p.parts ?? []).forEach(walk);
-	};
-	walk(payload);
-	return parts;
-}
-
 function htmlToText(html: string): string {
 	return html
 		.replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -693,8 +682,23 @@ function isBodyPart(part: GmailPart): boolean {
 	return !/^\s*attachment/i.test(disposition ?? "");
 }
 
+// Walks only what the sender wrote. An enclosed message brings its own text
+// parts, and those carry no filename or disposition of their own, so judging
+// each part in a flattened list would let them pass; the walk stops at the
+// enclosure instead of looking inside it.
+function bodyParts(payload: GmailPart | undefined): GmailPart[] {
+	const out: GmailPart[] = [];
+	const walk = (p: GmailPart | undefined) => {
+		if (!p || !isBodyPart(p)) return;
+		out.push(p);
+		for (const child of p.parts ?? []) walk(child);
+	};
+	walk(payload);
+	return out;
+}
+
 export function extractBody(payload: GmailPart | undefined): string {
-	const parts = flattenParts(payload).filter(isBodyPart);
+	const parts = bodyParts(payload);
 
 	const plain = parts.find((p) => p.mimeType === "text/plain" && p.body?.data);
 	if (plain) return decodePartData(plain);
@@ -710,8 +714,7 @@ export function extractBody(payload: GmailPart | undefined): string {
 export function textPartAttachment(
 	payload: GmailPart | undefined,
 ): { attachmentId: string; mimeType: string; charset: string; size: number } | null {
-	const parts = flattenParts(payload);
-	const bodies = parts.filter(isBodyPart);
+	const bodies = bodyParts(payload);
 	const part =
 		bodies.find((p) => p.mimeType === "text/plain" && p.body?.attachmentId) ??
 		bodies.find((p) => p.mimeType === "text/html" && p.body?.attachmentId);

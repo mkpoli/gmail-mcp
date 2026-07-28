@@ -995,3 +995,48 @@ describe("gmailFetch response ceiling", () => {
 		expect(await gmailFetch<{ ok: number }>("tok", "/profile")).toEqual({ ok: 1 });
 	});
 });
+
+describe("body selection inside an attached message", () => {
+	const b64 = (s: string) =>
+		btoa(String.fromCharCode(...new TextEncoder().encode(s)))
+			.replace(/\+/g, "-")
+			.replace(/\//g, "_")
+			.replace(/=+$/, "");
+
+	// A message enclosed as an attachment brings its own text parts. Reading one
+	// as this message's body puts a stranger's mail into replies and forwards.
+	const withAttachedMail: GmailPart = {
+		mimeType: "multipart/mixed",
+		parts: [
+			{
+				mimeType: "multipart/alternative",
+				parts: [{ mimeType: "text/html", body: { data: b64("<p>the real body</p>") } }],
+			},
+			{
+				mimeType: "message/rfc822",
+				filename: "forwarded.eml",
+				headers: [{ name: "Content-Disposition", value: "attachment" }],
+				parts: [{ mimeType: "text/plain", body: { data: b64("someone else's mail") } }],
+			},
+		],
+	};
+
+	test("reads the enclosing message, not the one enclosed", () => {
+		expect(extractBody(withAttachedMail)).toBe("the real body");
+	});
+
+	test("does not treat an enclosed part as an externalized body", () => {
+		expect(
+			textPartAttachment({
+				mimeType: "multipart/mixed",
+				parts: [
+					{
+						mimeType: "message/rfc822",
+						filename: "forwarded.eml",
+						parts: [{ mimeType: "text/plain", body: { attachmentId: "inner-att", size: 10 } }],
+					},
+				],
+			}),
+		).toBeNull();
+	});
+});
