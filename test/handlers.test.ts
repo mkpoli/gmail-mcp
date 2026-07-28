@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 // that talks to Gmail actually lives — be exercised without one.
 class Stub {}
 const runtimeShim: unknown = new Proxy(
-	{ env: {}, default: {} },
+	// mock.module is process-wide, so this stands in for every test file that
+	// imports the runtime; the secret belongs here for the ones that sign with it.
+	{ env: { COOKIE_ENCRYPTION_KEY: "cookie-secret" }, default: {} },
 	{
 		get: (target: Record<string, unknown>, prop: string) => (prop in target ? target[prop] : Stub),
 		has: () => true,
