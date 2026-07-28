@@ -66,9 +66,10 @@ for (const [name, hint] of secrets) {
 if (await confirm("  Generate a fresh COOKIE_ENCRYPTION_KEY?")) {
 	const key = crypto.getRandomValues(new Uint8Array(32));
 	const hex = [...key].map((b) => b.toString(16).padStart(2, "0")).join("");
-	await Bun.write("/tmp/.gmail-mcp-key", hex);
-	await $`cat /tmp/.gmail-mcp-key | bunx wrangler secret put COOKIE_ENCRYPTION_KEY`;
-	await $`rm -f /tmp/.gmail-mcp-key`;
+	// Written to wrangler's stdin rather than to a file: a temp file would be
+	// readable by anyone on the machine while it existed, and would survive a
+	// failed or interrupted upload.
+	await $`bunx wrangler secret put COOKIE_ENCRYPTION_KEY`.stdin(new TextEncoder().encode(hex));
 }
 
 if (await confirm("  Deploy now?")) {

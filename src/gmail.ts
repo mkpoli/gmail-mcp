@@ -426,6 +426,9 @@ export function buildRfc822({
 	assertHeaderSafe("Subject", subject);
 	if (inReplyTo) assertLiteralFits("In-Reply-To", assertHeaderSafe("In-Reply-To", inReplyTo));
 	if (references) assertLiteralFits("References", assertHeaderSafe("References", references));
+	if (!to.trim()) {
+		throw new Error("a message needs at least one recipient");
+	}
 	if (inlineImages.length > 0 && !htmlBody) {
 		throw new Error("inline images require an htmlBody that references their cid");
 	}

@@ -58,6 +58,10 @@ const THREAD_TOTAL_BUDGET = 30_000;
 // any bytes are fetched — base64 of a large file would otherwise be buffered
 // whole in the session's Durable Object before any cap could apply.
 const ATTACHMENT_BYTE_LIMIT = 1_500_000;
+// What may come back inside a tool result. The download ceiling above bounds
+// memory; this bounds the reply, which is read into an assistant's context
+// where base64 costs roughly a token every four characters.
+const ATTACHMENT_INLINE_LIMIT = 200_000;
 // Carries the authenticated account from the OAuth boundary to the session
 // object. Set from the decrypted grant after any inbound copy is removed, so
 // what arrives at the object is what the OAuth layer authenticated.
@@ -210,15 +214,22 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		items: T[],
 		limit: number,
 		fn: (item: T) => Promise<R>,
-	): Promise<R[]> {
-		const out: R[] = new Array(items.length);
+	): Promise<(R | { error: string })[]> {
+		const out: (R | { error: string })[] = new Array(items.length);
 		let next = 0;
 		const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
 			while (next < items.length) {
 				const i = next++;
 				const item = items[i];
 				if (item === undefined) continue;
-				out[i] = await fn(item);
+				try {
+					out[i] = await fn(item);
+				} catch (e) {
+					// A mailbox changes under a wide read: a message is trashed between
+					// the listing and the fetch, or Gmail reissues an attachment id.
+					// One gone item should not discard the rest of the results.
+					out[i] = { error: e instanceof Error ? e.message : String(e) };
+				}
 			}
 		});
 		await Promise.all(workers);
@@ -302,7 +313,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				return this.text({
 					resultSizeEstimate: list.resultSizeEstimate,
 					nextPageToken: list.nextPageToken,
-					messages: messages.map(summarizeMessage),
+					// A message that vanished between the listing and the fetch is
+					// reported in place rather than failing the whole search.
+					messages: messages.map((m) => ("error" in m ? m : summarizeMessage(m))),
 				});
 			},
 		);
@@ -660,8 +673,18 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const skipped = collectAttachments(original.payload)
 					.filter((a) => a.size > ATTACHMENT_BYTE_LIMIT)
 					.map((a) => a.filename);
-				const attachments = includeAttachments
+				let carriedBytes = 0;
+				const fetched = includeAttachments
 					? await this.mapLimited(carried, 4, async (a) => {
+							// The builder's ceiling is reached only once everything is in
+							// memory, which for a forward is far too late: these bytes come
+							// from Gmail rather than from the caller.
+							carriedBytes += a.size;
+							if (carriedBytes > ATTACHMENT_BYTE_LIMIT * 4) {
+								throw new Error(
+									"this message carries more attachment data than can be forwarded; forward it from a mail client",
+								);
+							}
 							const blob = await this.api<AttachmentBody>(
 								`/messages/${encodeURIComponent(original.id ?? "")}/attachments/${encodeURIComponent(a.attachmentId)}`,
 							);
@@ -673,6 +696,15 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 							};
 						})
 					: [];
+				// A forward that quietly drops an attachment is worse than one that
+				// does not go: the recipient cannot tell what is missing.
+				const failed = fetched.find((a) => "error" in a);
+				if (failed && "error" in failed) {
+					throw new Error(`an attachment could not be read: ${failed.error}`);
+				}
+				const attachments = fetched.filter(
+					(a): a is { filename: string; contentType: string; content: string } => !("error" in a),
+				);
 
 				const raw = b64urlEncode(
 					buildRfc822({
@@ -773,6 +805,12 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					return this.text({
 						...meta,
 						text: truncate(decodeAttachmentText(data, part.mimeType, part.charset), BODY_LIMIT),
+					});
+				}
+				if (data.length > ATTACHMENT_INLINE_LIMIT) {
+					return this.text({
+						...meta,
+						error: `this attachment is ${part.size} bytes, too large to return inline; open it in a mail client`,
 					});
 				}
 				return this.text({ ...meta, dataBase64Url: data });

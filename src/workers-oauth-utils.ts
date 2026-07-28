@@ -465,7 +465,13 @@ export interface ApprovalDialogOptions {
 export function renderApprovalDialog(request: Request, options: ApprovalDialogOptions): Response {
 	const { client, server, state, csrfToken, setCookie } = options;
 
-	const encodedState = btoa(JSON.stringify(state));
+	// A client may put any text in its state parameter, and btoa refuses anything
+	// past U+00FF. The JSON is encoded as UTF-8 first so a non-Latin script in
+	// the round-tripped request cannot take the sign-in down.
+	const json = new TextEncoder().encode(JSON.stringify(state));
+	let binary = "";
+	for (const byte of json) binary += String.fromCharCode(byte);
+	const encodedState = btoa(binary);
 
 	const serverName = sanitizeText(server.name);
 	const clientName = client?.clientName ? sanitizeText(client.clientName) : "Unknown MCP Client";

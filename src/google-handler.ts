@@ -154,7 +154,8 @@ app.post("/authorize", async (c) => {
 
 		let state: { oauthReqInfo?: AuthRequest };
 		try {
-			state = JSON.parse(atob(encodedState));
+			const bytes = Uint8Array.from(atob(encodedState), (ch) => ch.charCodeAt(0));
+			state = JSON.parse(new TextDecoder().decode(bytes));
 		} catch (_e) {
 			return c.text("Invalid state data", 400);
 		}
