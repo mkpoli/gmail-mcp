@@ -718,7 +718,7 @@ export function decodeEncodedWords(value: string): string {
 			// way, so leaving it in both corrupts what this module itself wrote and,
 			// when the separator is a fold, produces a line break the header guard
 			// then refuses.
-			.replace(/\?=[ \t]*(?:\r?\n[ \t]+)?(?==\?[\w-]+\?[BbQq]\?)/g, "?=")
+			.replace(/\?=(?:[ \t]|\r?\n[ \t]+)*(?==\?[\w-]+\?[BbQq]\?)/g, "?=")
 			.replace(
 				/=\?([\w-]+)\?([BbQq])\?([^?]*)\?=/g,
 				(word, charset: string, encoding: string, text: string) => {

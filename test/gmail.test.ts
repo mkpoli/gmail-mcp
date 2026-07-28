@@ -1390,6 +1390,19 @@ describe("adjacent encoded words", () => {
 		expect(decoded).not.toMatch(/[\r\n]/);
 	});
 
+	// RFC 5322's obsolete folding allows several folds where one would do, and
+	// mail software emits it on long non-ASCII subjects.
+	test("drops several folds between them as readily as one", () => {
+		expect(decodeEncodedWords(`${word("abc")}\r\n \r\n ${word("def")}`)).toBe("abcdef");
+		expect(decodeEncodedWords(`${word("abc")} \r\n\t${word("def")}`)).toBe("abcdef");
+	});
+
+	// Without the whitespace that makes it a fold, a break is not folding at all
+	// and the value stays as it arrived rather than being quietly repaired.
+	test("leaves a bare line break alone", () => {
+		expect(decodeEncodedWords(`${word("abc")}\r\n${word("def")}`)).toMatch(/[\r\n]/);
+	});
+
 	test("keeps whitespace that belongs to the value", () => {
 		expect(decodeEncodedWords(`${word("山田")} <y@example.jp>`)).toBe("山田 <y@example.jp>");
 		expect(decodeEncodedWords(`${word("a")} plain ${word("b")}`)).toBe("a plain b");
