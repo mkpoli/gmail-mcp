@@ -382,11 +382,32 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const threadQuery = includeBodies
 					? "format=full"
 					: `format=metadata${SUMMARY_HEADERS.map((h) => `&metadataHeaders=${h}`).join("")}`;
-				const t = await this.api<{ messages?: GmailMessage[] }>(
-					`/threads/${encodeURIComponent(threadId)}?${threadQuery}`,
-				);
-				const all: GmailMessage[] = t.messages ?? [];
-				const kept = all.slice(-maxMessages);
+				let all: GmailMessage[];
+				let kept: GmailMessage[];
+				try {
+					const t = await this.api<{ messages?: GmailMessage[] }>(
+						`/threads/${encodeURIComponent(threadId)}?${threadQuery}`,
+					);
+					all = t.messages ?? [];
+					kept = all.slice(-maxMessages);
+				} catch (e) {
+					if (!(e instanceof GmailApiError) || e.status !== 413) throw e;
+					// One read of a thread returns every message whatever was asked
+					// for, so a long one can be too large to answer at all. Asking
+					// for the ids alone is a few tens of bytes each, and the window
+					// that was wanted is then fetched a message at a time.
+					const ids = await this.api<{ messages?: { id?: string }[] }>(
+						`/threads/${encodeURIComponent(threadId)}?format=minimal&fields=messages/id`,
+					);
+					all = ids.messages ?? [];
+					const window = all.slice(-maxMessages);
+					const fetched = await this.mapLimited(window, 4, (m) =>
+						this.api<GmailMessage>(
+							`/messages/${encodeURIComponent(m.id ?? "")}?${includeBodies ? "format=full" : threadQuery}`,
+						),
+					);
+					kept = fetched.filter((m): m is GmailMessage => !("error" in m));
+				}
 				const omitted = all.length - kept.length;
 
 				if (!includeBodies) {

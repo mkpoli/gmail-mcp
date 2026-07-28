@@ -353,3 +353,31 @@ describe("token handling", () => {
 		expect(refreshes).toHaveLength(1);
 	});
 });
+
+describe("get_thread on a thread too large to read at once", () => {
+	// One read returns every message however few were asked for, so a long
+	// thread can be unanswerable. The ids are small; the window is fetched
+	// a message at a time from those.
+	test("enumerates the ids, then fetches only the window", async () => {
+		const { handlers } = await boot();
+		const ids = Array.from({ length: 40 }, (_, n) => ({ id: `m${n}` }));
+		serveGmail([
+			[/\/threads\/[^?]+\?format=minimal/, () => ({ messages: ids })],
+			[/\/threads\//, () => new Response("thread too large", { status: 413 })],
+			[/\/messages\/m3[89]/, (url) => message(url.match(/m\d+/)?.[0] ?? "m")],
+		]);
+		const out = result(await tool(handlers, "get_thread")({ threadId: "t1", maxMessages: 2 }));
+		expect(out.messageCount).toBe(40);
+		expect((out.messages as { id: string }[]).map((m) => m.id)).toEqual(["m38", "m39"]);
+		// The whole thread was never fetched a second time.
+		expect(requests.filter((r) => /\/messages\/m/.test(r.url))).toHaveLength(2);
+	});
+
+	test("asks Gmail only for the headers a summary uses", async () => {
+		const { handlers } = await boot();
+		serveGmail([[/\/threads\//, () => ({ messages: [message("m1")] })]]);
+		await tool(handlers, "get_thread")({ threadId: "t1", includeBodies: false });
+		const threadCall = requests.find((r) => r.url.includes("/threads/"));
+		expect(threadCall?.url).toContain("metadataHeaders=Subject");
+	});
+});
