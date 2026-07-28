@@ -134,6 +134,20 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		return this.props;
 	}
 
+	// A request naming a different account replaces this object's props on the
+	// way in — the framework writes them before any code here can refuse the
+	// request, on a warm instance as much as a cold one. A call already in
+	// flight would then read whatever arrived, so credentials are taken against
+	// the account recorded in storage rather than trusted for being present.
+	private async ownerProps(): Promise<Props> {
+		const owner = await this.ctx.storage.get<string>("owner");
+		const props = this.grantProps;
+		if (owner !== undefined && props.email.toLowerCase() !== owner) {
+			throw new Error("this MCP session belongs to a different Google account");
+		}
+		return props;
+	}
+
 	// The MCP transport addresses this Durable Object by the Mcp-Session-Id
 	// header alone, so the session id — not the OAuth grant — would otherwise
 	// decide whose mailbox a request reaches. The first grant to touch a session
@@ -161,11 +175,12 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	private refreshing: Promise<string> | null = null;
 
 	private async token(forceRefresh = false): Promise<string> {
+		const props = await this.ownerProps();
 		if (!forceRefresh) {
 			const cached = await this.ctx.storage.get<TokenCache>("token");
 			const current = cached ?? {
-				accessToken: this.grantProps.accessToken,
-				expiresAt: this.grantProps.expiresAt,
+				accessToken: props.accessToken,
+				expiresAt: props.expiresAt,
 			};
 			if (Date.now() < current.expiresAt - 60_000) {
 				return current.accessToken;
@@ -176,7 +191,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const refreshed = await refreshGoogleToken({
 					client_id: this.env.GOOGLE_CLIENT_ID,
 					client_secret: this.env.GOOGLE_CLIENT_SECRET,
-					refresh_token: this.grantProps.refreshToken,
+					refresh_token: props.refreshToken,
 				});
 				const next: TokenCache = {
 					accessToken: refreshed.access_token,
@@ -197,7 +212,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	private async assertWithinRate(): Promise<void> {
 		const limiter = this.env.RATE_LIMITER;
 		if (!limiter) return;
-		const { success } = await limiter.limit({ key: this.grantProps.email.toLowerCase() });
+		const props = await this.ownerProps();
+		const { success } = await limiter.limit({ key: props.email.toLowerCase() });
 		if (!success) {
 			throw new Error("rate limit reached for this account; retry shortly");
 		}

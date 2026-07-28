@@ -169,6 +169,25 @@ describe("session ownership", () => {
 		await expect(tool(handlers, "whoami")({})).rejects.toThrow(/different Google account/);
 		expect(storage.get("owner")).toBe("owner@example.com");
 	});
+
+	// The framework writes a request's props onto the object before any check
+	// here can refuse the request, so a foreign grant reaching a live session
+	// replaces the credentials a call in flight is about to read. What that call
+	// sends has to belong to the owner or it reaches the wrong mailbox.
+	test("refuses credentials that no longer belong to the owner", async () => {
+		const { agent, handlers } = await boot("owner@example.com");
+		serveGmail([[/\/profile/, () => ({ emailAddress: "owner@example.com" })]]);
+		await tool(handlers, "whoami")({});
+
+		// The caller is still the owner — the account the boundary stamped on the
+		// request — and only the grant underneath it changed.
+		(agent as { callerAccount: string }).callerAccount = "owner@example.com";
+		const props = (agent as { props: Record<string, string | number> }).props;
+		props.email = "intruder@example.com";
+		props.accessToken = "intruder-access-token";
+		await expect(tool(handlers, "whoami")({})).rejects.toThrow(/different Google account/);
+		expect(requests).toHaveLength(1);
+	});
 });
 
 describe("search_messages", () => {
