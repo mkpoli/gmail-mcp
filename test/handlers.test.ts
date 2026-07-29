@@ -252,6 +252,7 @@ describe("reply_all", () => {
 	test("answers the sender, keeps the others, drops this account", async () => {
 		const { handlers } = await boot();
 		serveGmail([
+			[/\/settings\/sendAs/, () => ({ sendAs: [{ sendAsEmail: "me@example.com" }] })],
 			[/\/messages\/m1\?format=full/, () => message("m1")],
 			[/\/messages\/send/, () => ({ id: "sent", threadId: "t-m1" })],
 		]);
@@ -274,6 +275,7 @@ describe("reply_all", () => {
 			{ name: "References", value: `<${"w".repeat(950)}@evil.example.com> <real@example.com>` },
 		];
 		serveGmail([
+			[/\/settings\/sendAs/, () => ({ sendAs: [{ sendAsEmail: "me@example.com" }] })],
 			[/\/messages\/m1\?format=full/, () => hostile],
 			[/\/messages\/send/, () => ({ id: "sent", threadId: "t-m1" })],
 		]);
@@ -834,5 +836,47 @@ describe("the headers the boundary hands on", () => {
 			expect(headers.get("x-partykit-props")).toBeNull();
 			expect(headers.get("x-gmail-mcp-account")).toBeNull();
 		}
+	});
+});
+
+describe("when the account's identities cannot be read", () => {
+	// Which addresses are this account's own decides who a reply comes from and
+	// who it copies. A reply is sent once, so a lookup that cannot answer must
+	// not fall through to answering as the primary address.
+	test("does not send the reply", async () => {
+		const { handlers } = await boot();
+		serveGmail([
+			[
+				/\/settings\/sendAs/,
+				() => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }),
+			],
+			[/\/messages\/m1\?format=full/, () => message("m1")],
+			[/\/messages\/send/, () => ({ id: "sent", threadId: "t-m1" })],
+		]);
+		await expect(tool(handlers, "reply_all")({ messageId: "m1", body: "ok" })).rejects.toThrow(
+			/send-as identities/,
+		);
+		expect(requests.filter((r) => r.url.includes("/messages/send"))).toHaveLength(0);
+	});
+
+	// A day-old answer is a better guide than none, and it keeps replies working
+	// through a passing failure of the settings endpoint.
+	test("falls back to the answer it was given before", async () => {
+		const { agent, handlers, storage } = await boot();
+		storage.set("sendAs", {
+			at: Date.now() - 48 * 60 * 60 * 1000,
+			addresses: ["me@example.com", "sales@example.com"],
+		});
+		void agent;
+		serveGmail([
+			[
+				/\/settings\/sendAs/,
+				() => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }),
+			],
+			[/\/messages\/m1\?format=full/, () => message("m1")],
+			[/\/messages\/send/, () => ({ id: "sent", threadId: "t-m1" })],
+		]);
+		const out = result(await tool(handlers, "reply_all")({ messageId: "m1", body: "ok" }));
+		expect(out.to).toEqual(["alice@example.com"]);
 	});
 });

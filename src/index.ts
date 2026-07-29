@@ -215,14 +215,16 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		return this.refreshing;
 	}
 
-	// One account can open many sessions, so the ceiling has to be counted per
-	// account rather than per Durable Object. The platform limiter keeps that
-	// count outside any one session.
 	// The addresses this account may send as, beyond the Google address itself.
 	// Gmail calls them send-as identities and mail addressed to one is addressed
 	// here. They change about as often as an account is set up, so they are kept
-	// for a day rather than looked up on every reply, and a lookup that fails
-	// leaves replies behaving as they did before it existed.
+	// for a day rather than looked up on every reply.
+	//
+	// Which identities are this account's own decides both who a reply comes
+	// from and who it copies, and a reply is sent once. So a lookup that cannot
+	// answer falls back to the last answer it gave, and with nothing to fall
+	// back on it stops: an error the caller can retry beats a message that went
+	// to the correspondent from an address they were never given.
 	private async sendAsAddresses(): Promise<string[]> {
 		const cached = await this.ctx.storage.get<{ at: number; addresses: string[] }>("sendAs");
 		if (cached && Date.now() - cached.at < SEND_AS_TTL_MS) return cached.addresses;
@@ -233,10 +235,19 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				.filter((address): address is string => Boolean(address));
 			await this.ctx.storage.put("sendAs", { at: Date.now(), addresses });
 			return addresses;
-		} catch {
-			return [];
+		} catch (error: unknown) {
+			if (cached) return cached.addresses;
+			throw new Error(
+				`could not read this account's send-as identities, so this reply was not sent: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			);
 		}
 	}
+
+	// One account can open many sessions, so the ceiling has to be counted per
+	// account rather than per Durable Object. The platform limiter keeps that
+	// count outside any one session.
 
 	private async assertWithinRate(): Promise<void> {
 		const limiter = this.env.RATE_LIMITER;
