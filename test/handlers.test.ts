@@ -1,39 +1,5 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-
-// The agent is a Durable Object, and importing it pulls in the Cloudflare
-// runtime modules. Standing those in lets the tool handlers — where the logic
-// that talks to Gmail actually lives — be exercised without one.
-class Stub {}
-const runtimeShim: unknown = new Proxy(
-	// mock.module is process-wide, so this stands in for every test file that
-	// imports the runtime; the secret belongs here for the ones that sign with it.
-	{ env: { COOKIE_ENCRYPTION_KEY: "cookie-secret" }, default: {} },
-	{
-		get: (target: Record<string, unknown>, prop: string) => (prop in target ? target[prop] : Stub),
-		has: () => true,
-		ownKeys: () => [
-			"env",
-			"default",
-			"WorkerEntrypoint",
-			"DurableObject",
-			"RpcTarget",
-			"WorkflowEntrypoint",
-			"EmailMessage",
-			"connect",
-			"exports",
-			"__esModule",
-		],
-		getOwnPropertyDescriptor: () => ({ configurable: true, enumerable: true, value: Stub }),
-	},
-);
-for (const name of [
-	"cloudflare:workers",
-	"cloudflare:email",
-	"cloudflare:sockets",
-	"cloudflare:workflows",
-]) {
-	mock.module(name, () => runtimeShim);
-}
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import "./runtime-shim";
 
 const { GmailMCP, default: worker } = await import("../src/index");
 

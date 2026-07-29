@@ -1,20 +1,5 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-
-// The handler is a Worker module, so the Cloudflare runtime imports it pulls in
-// are stood in the same way the tool-handler tests do it.
-class Stub {}
-const runtimeShim: unknown = new Proxy(
-	{ env: { COOKIE_ENCRYPTION_KEY: "cookie-secret" }, default: {} },
-	{
-		get: (target: Record<string, unknown>, prop: string) => (prop in target ? target[prop] : Stub),
-		has: () => true,
-		ownKeys: () => ["env", "default", "__esModule"],
-		getOwnPropertyDescriptor: () => ({ configurable: true, enumerable: true, value: Stub }),
-	},
-);
-for (const name of ["cloudflare:workers", "cloudflare:email", "cloudflare:sockets"]) {
-	mock.module(name, () => runtimeShim);
-}
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import "./runtime-shim";
 
 const { GoogleHandler } = await import("../src/google-handler");
 const { bindStateToSession, createOAuthState } = await import("../src/workers-oauth-utils");
