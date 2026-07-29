@@ -811,7 +811,11 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					to: decodeEncodedWords(headerValue(original, "To") ?? ""),
 					cc: decodeEncodedWords(headerValue(original, "Cc") ?? ""),
 				};
-				const originalBody = truncate(await this.messageBody(original), THREAD_BODY_LIMIT);
+				// A forward carries the message itself, not a quotation of it, and
+				// the person it reaches has no other copy to fall back on. The
+				// thread budget is the wrong one here: it exists for quoted
+				// history, where the reader already holds the original.
+				const originalBody = truncate(await this.messageBody(original), BODY_LIMIT);
 
 				const own = collectAttachments(original.payload).filter((a) => !a.enclosed);
 				const carried = own.filter((a) => a.size <= ATTACHMENT_BYTE_LIMIT);

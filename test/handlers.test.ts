@@ -880,3 +880,45 @@ describe("when the account's identities cannot be read", () => {
 		expect(out.to).toEqual(["alice@example.com"]);
 	});
 });
+
+describe("forwarding a long message", () => {
+	// A quotation may be trimmed because the reader already has the original.
+	// A forward is the original, and the person it reaches has no other copy.
+	const long = Array.from(
+		{ length: 300 },
+		(_, i) => `Paragraph ${i}: this is an ordinary sentence of the kind a report is made of.`,
+	).join("\n\n");
+
+	test("carries the whole body, not a quotation's worth of it", async () => {
+		const { handlers } = await boot();
+		const report = message("m1", {
+			payload: {
+				mimeType: "text/plain",
+				headers: [
+					{ name: "From", value: "Alice <alice@example.com>" },
+					{ name: "To", value: "me@example.com" },
+					{ name: "Subject", value: "Quarterly report" },
+				],
+				body: { data: b64url(long) },
+			},
+		});
+		serveGmail([
+			[/\/messages\/m1\?format=full/, () => report],
+			[/\/messages\/send/, () => ({ id: "f1", threadId: "t2" })],
+		]);
+		await tool(handlers, "forward_message")({ messageId: "m1", to: "b@example.com" });
+
+		const sent = requests.find((r) => r.url.includes("/messages/send"));
+		const encoded = String((sent?.body as { raw?: string } | undefined)?.raw ?? "");
+		const mime = new TextDecoder().decode(
+			Uint8Array.from(atob(encoded.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)),
+		);
+		const carried = new TextDecoder().decode(
+			Uint8Array.from(atob((mime.split("\r\n\r\n")[1] ?? "").replace(/\r\n/g, "")), (c) =>
+				c.charCodeAt(0),
+			),
+		);
+		expect(carried).toContain("Paragraph 299:");
+		expect(carried).not.toContain("truncated:");
+	});
+});

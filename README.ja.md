@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#-できること)
-[![tests](https://img.shields.io/badge/tests-232_passing-success?logo=bun&logoColor=white)](#-テスト)
+[![tests](https://img.shields.io/badge/tests-233_passing-success?logo=bun&logoColor=white)](#-テスト)
 
 *[English README](./README.md) · [简体中文](./README.zh.md)*
 
@@ -261,7 +261,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 
 ## ✅ テスト
 
-232件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定、サインイン時のCSRFとstateの照合に加えて、Gmailの代役を立ててツール自体の動作も確かめています。セッションの所有者判定、宛先の組み立て、添付ファイルの選択、一部が失敗した読み取りの返し方まで含みます。
+233件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定、サインイン時のCSRFとstateの照合に加えて、Gmailの代役を立ててツール自体の動作も確かめています。セッションの所有者判定、宛先の組み立て、添付ファイルの選択、一部が失敗した読み取りの返し方まで含みます。
 
 実際のGmailアカウントの間でも、すべてのツールの動作を確認しました。
 
@@ -281,7 +281,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 ```sh
 bun run dev     # wrangler dev、:8788
 bun run check   # biome + tsc
-bun test        # 単体テスト232件
+bun test        # 単体テスト233件
 bun run assets  # ライト・ダークの図を再生成
 bun run deploy
 ```
