@@ -59,7 +59,7 @@
 
 ## 🚀 導入
 
-所要時間は10分ほどです。独自ドメインを設定したCloudflareアカウント、[Bun](https://bun.sh)、Googleアカウントを用意してください。
+所要時間は10分ほどです。Cloudflareアカウント、[Bun](https://bun.sh)、Googleアカウントを用意してください。独自ドメインは任意で、なければworkers.devのホスト名で応答します。
 
 ### 1. Google OAuthクライアントを作る
 
@@ -74,31 +74,38 @@ gcloud services enable gmail.googleapis.com
 以下の2項目には設定用のAPIがないため、[Google Cloudコンソール](https://console.cloud.google.com/)で操作してください。
 
 - [**OAuth同意画面**](https://console.cloud.google.com/auth/overview)で、ユーザーの種類に*External*を選びます。審査が完了するまでは、接続するGoogleアカウントを**テストユーザー**に登録します。
-- [**認証情報**](https://console.cloud.google.com/apis/credentials) **→ 認証情報を作成 → OAuthクライアントID** → *ウェブアプリケーション*。承認済みのリダイレクトURIに`https://<自分のドメイン>/callback`を追加し、クライアントIDとシークレットを控えておきます。
+- [**認証情報**](https://console.cloud.google.com/apis/credentials) **→ 認証情報を作成 → OAuthクライアントID** → *ウェブアプリケーション*。承認済みのリダイレクトURIに`https://<ホスト名>/callback`を追加し、クライアントIDとシークレットを控えておきます。
+
+`<ホスト名>`は、Workerに向けた独自ドメインか、割り当てられるworkers.devのホスト名です。先にデプロイしてから登録しても構いません。Workerが`/`で配信する手順ページに、そのままの値が出ています。
 
 ### 2. Workerをデプロイする
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mkpoli/gmail-mcp)
+
+ボタンからだと、リポジトリが自分のGitHubアカウントに複製され、KV名前空間とDurable Objectが作られ、4つのシークレットを尋ねられます。デプロイ先はworkers.devで、独自ドメインは後から**Settings → Domains & Routes**で割り当てます。
+
+ターミナルからの場合:
 
 ```sh
 git clone https://github.com/mkpoli/gmail-mcp && cd gmail-mcp
 bun install
-# wrangler.jsoncの`name`とroutesの`pattern`を自分のドメインに変更します
 bun run setup
 ```
 
-`bun run setup`では、クライアントIDとシークレットの入力、Cookie鍵の生成、デプロイまでを行います。`wrangler.jsonc`に書かれている`OAUTH_KV`のidはこのサーバーが動いているアカウントのものなので、setupは自分のアカウントにあるかどうかを確かめて、なければ新しい名前空間の作成を尋ねます。シークレットを1つ入れ替えるだけの場合も、そのまま再実行できます。
+`bun run setup`では、応答させるドメインの指定、`OAUTH_KV`名前空間の作成または再利用、クライアントIDとシークレットの入力、Cookie鍵の生成、デプロイまでを行います。前半2つの答えは`wrangler.local.jsonc`に書き出され、gitの管理外に置かれます。`wrangler.jsonc`には特定のアカウントの名前空間もドメインも入らないので、クローンをそのまま好きなアカウントへデプロイできます。シークレットを1つ入れ替えるだけの場合も、そのまま再実行できます。
 
 ### 3. クライアントをつなぐ
 
 クライアントIDとシークレットの欄は空のままにしてください。MCPクライアントは自分で登録します。
 
 ```sh
-claude mcp add --transport http gmail-personal https://<自分のドメイン>/mcp
-claude mcp add --transport http gmail-work     https://<自分のドメイン>/mcp/work
+claude mcp add --transport http gmail-personal https://<ホスト名>/mcp
+claude mcp add --transport http gmail-work     https://<ホスト名>/mcp/work
 ```
 
 Claude Codeでは`/mcp`を実行し、接続ごとに対応するGoogleアカウントでサインインします。claude.aiの場合は**設定 → コネクタ → カスタムコネクタを追加**から同じURLを入力してください。`/mcp/`の後ろには任意の1階層のラベルを指定できます。同じURLのサーバーを2つ登録できないクライアントでも、この方法なら1つのデプロイで複数のメールボックスを扱えます。
 
-デプロイ先のトップページ`https://<自分のドメイン>/`では、この手順をそのまま表示します。
+デプロイ先のトップページ`https://<ホスト名>/`では、この手順をそのまま表示します。
 
 ---
 

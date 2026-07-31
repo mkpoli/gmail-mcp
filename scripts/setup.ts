@@ -1,11 +1,14 @@
 #!/usr/bin/env bun
-// Guided deployment: KV namespace, secrets, deploy. Every step is skippable,
-// so re-running it to rotate one secret is safe.
+// Guided deployment: domain, KV namespace, secrets, deploy. Every step is
+// skippable, so re-running it to rotate one secret is safe.
 
 import { $ } from "bun";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
-const CONFIG = "wrangler.jsonc";
+const TEMPLATE = "wrangler.jsonc";
+const LOCAL = "wrangler.local.jsonc";
+const REDIRECT = ".wrangler/deploy/config.json";
 
 function ask(question: string): Promise<string> {
 	process.stdout.write(question);
@@ -25,52 +28,79 @@ async function confirm(question: string): Promise<boolean> {
 	return answer === "" || answer === "y" || answer === "yes";
 }
 
-const config = readFileSync(CONFIG, "utf8");
-const domain = config.match(/"pattern":\s*"([^"]+)"/)?.[1];
-const kvId = config.match(/"binding":\s*"OAUTH_KV",\s*"id":\s*"([0-9a-f]*)"/s)?.[1] ?? "";
+// Both config files keep their comments on their own lines, which is the only
+// JSONC this has to survive.
+function parseJsonc(text: string): Record<string, unknown> {
+	return JSON.parse(text.replace(/^\s*\/\/.*$/gm, ""));
+}
 
-// The id committed here belongs to the account this server was first deployed
-// from. A fork reaching Cloudflare with it is refused, and the message names
-// the namespace rather than the config, so whether the id is one of this
-// account's own is settled here instead of at upload.
-async function kvNamespaceIsOurs(id: string): Promise<boolean> {
-	if (!id) return false;
+type Namespace = { id: string; title: string };
+
+async function namespaces(): Promise<Namespace[] | null> {
 	try {
-		const listed = await $`bunx wrangler kv namespace list`.text();
-		return listed.includes(id);
+		const out = await $`bunx wrangler kv namespace list`.text();
+		const array = out.slice(out.indexOf("["), out.lastIndexOf("]") + 1);
+		return JSON.parse(array);
 	} catch {
-		// Not signed in yet, or wrangler could not reach the API. The upload
-		// will say so far more clearly than a guess here would.
-		return true;
+		// Not signed in yet, or wrangler could not reach the API. Saying so is
+		// left to the command that needs the answer.
+		return null;
 	}
 }
+
+const template = readFileSync(TEMPLATE, "utf8");
+const local = existsSync(LOCAL) ? (parseJsonc(readFileSync(LOCAL, "utf8")) as Record<string, any>) : null;
+
+const configuredDomain: string | undefined = local?.routes?.[0]?.pattern;
+const configuredKv: string | undefined = local?.kv_namespaces?.[0]?.id;
 
 console.log("\n  gmail-mcp setup\n");
-console.log(`  config      ${CONFIG}`);
-console.log(`  domain      ${domain ?? "(no custom domain configured)"}`);
-console.log(`  redirect    https://${domain ?? "<your-domain>"}/callback`);
+console.log(`  template    ${TEMPLATE}`);
+console.log(`  deployment  ${LOCAL}${local ? "" : " (not written yet)"}`);
+console.log(`  domain      ${configuredDomain ?? "(workers.dev)"}`);
+console.log(`  redirect    https://${configuredDomain ?? "<worker>.<subdomain>.workers.dev"}/callback`);
 console.log("\n  The redirect URI above must exist on your Google OAuth client.\n");
 
-if (await kvNamespaceIsOurs(kvId)) {
-	console.log("  KV namespace already configured — skipping.\n");
-} else {
-	console.log(`  The configured KV namespace (${kvId || "none"}) is not in this account.`);
-	console.log("  Every OAuth grant and token lives there, so one is needed here.\n");
-	if (await confirm("  Create the OAuth KV namespace now?")) {
+let domain = configuredDomain;
+if (!domain || !(await confirm(`  Keep ${domain} as this deployment's domain?`))) {
+	const answer = await ask("  Custom domain, on a zone in this Cloudflare account (blank for workers.dev): ");
+	domain = answer || undefined;
+}
+
+// A namespace the account cannot see is one that belongs to somebody else, and
+// binding it fails at upload with a message about the id rather than the config.
+let kvId = configuredKv;
+const listed = await namespaces();
+if (listed && !listed.some((ns) => ns.id === kvId)) {
+	const existing = listed.find((ns) => ns.title.includes("gmail-mcp-oauth"));
+	if (existing && (await confirm(`  Bind the existing ${existing.title} namespace (${existing.id})?`))) {
+		kvId = existing.id;
+	} else if (await confirm("  Create a KV namespace for the OAuth grants now?")) {
 		const out = await $`bunx wrangler kv namespace create gmail-mcp-oauth`.text();
-		const id = out.match(/"id":\s*"([0-9a-f]+)"/)?.[1];
-		if (!id) {
+		kvId = out.match(/"id":\s*"([0-9a-f]+)"/)?.[1];
+		if (!kvId) {
 			console.log("\n  Could not read the namespace id from wrangler's output.");
-			console.log("  Copy it into wrangler.jsonc manually, then re-run.\n");
+			console.log(`  Put it in ${LOCAL} under kv_namespaces, then re-run.\n`);
 			process.exit(1);
 		}
-		writeFileSync(
-			CONFIG,
-			kvId ? config.replace(kvId, id) : config.replace(/("binding":\s*"OAUTH_KV",\s*"id":\s*")(")/s, `$1${id}$2`),
-		);
-		console.log(`\n  Wrote namespace ${id} into ${CONFIG}\n`);
 	}
 }
+
+const config = parseJsonc(template) as Record<string, any>;
+if (kvId) config.kv_namespaces[0].id = kvId;
+if (domain) config.routes = [{ pattern: domain, custom_domain: true }];
+
+writeFileSync(
+	LOCAL,
+	[
+		"// This deployment's own domain and KV namespace, written by `bun run setup`.",
+		`// ${TEMPLATE} stays free of both so that a clone deploys onto any account.`,
+		`${JSON.stringify(config, null, "\t")}\n`,
+	].join("\n"),
+);
+mkdirSync(dirname(REDIRECT), { recursive: true });
+writeFileSync(REDIRECT, `${JSON.stringify({ configPath: `../../${LOCAL}` }, null, "\t")}\n`);
+console.log(`\n  Wrote ${LOCAL}; deploy and dev read it from now on.\n`);
 
 const secrets = [
 	["GOOGLE_CLIENT_ID", "OAuth client id from Google Cloud Console"],
@@ -95,7 +125,11 @@ if (await confirm("  Generate a fresh COOKIE_ENCRYPTION_KEY?")) {
 
 if (await confirm("  Deploy now?")) {
 	await $`bun run deploy`;
-	console.log(`\n  Connect a client to https://${domain ?? "<your-domain>"}/mcp`);
+	console.log(
+		domain
+			? `\n  Connect a client to https://${domain}/mcp`
+			: "\n  Connect a client to the workers.dev URL above, with /mcp on the end",
+	);
 	console.log("  Leave the client's OAuth client id and secret fields empty.\n");
 }
 

@@ -148,24 +148,23 @@ gcloud services enable gmail.googleapis.com</pre>
 <ol class="steps">
   <li><a href="https://console.cloud.google.com/auth/overview"><b>OAuth consent screen</b></a> → <i>External</i> → app name and your email. While the app is unverified, add every mailbox you plan to connect under <b>Test users</b>.</li>
   <li><a href="https://console.cloud.google.com/apis/credentials"><b>Credentials</b></a> <b>→ Create credentials → OAuth client ID</b> → <i>Web application</i>, with one authorized redirect URI:
-    <pre>https://&lt;your-domain&gt;/callback</pre>
+    <pre id="redirect">https://&lt;your-host&gt;/callback</pre>
     Keep the client ID and secret for the next step.</li>
 </ol>
 
 <div class="note">Adding <code>http://localhost:8788/callback</code> as a second redirect URI now saves a trip back if you ever run <code>bun run dev</code>.</div>
 
 <h2><span class="n">2</span> Cloudflare</h2>
-<p>Clone, point the Worker at your domain, and let the setup script do the rest.</p>
+<p>Clone and let the setup script do the rest.</p>
 
 <div class="card copy">
 <pre id="c2">git clone https://github.com/mkpoli/gmail-mcp &amp;&amp; cd gmail-mcp
 bun install
-# edit wrangler.jsonc — set `name` and the routes `pattern` to your domain
 bun run setup</pre>
 <button data-copy="c2">copy</button>
 </div>
 
-<p><code>bun run setup</code> creates the KV namespace, prompts for each secret, generates the cookie key, and deploys. It is safe to re-run — every step can be skipped.</p>
+<p><code>bun run setup</code> asks which domain to answer on, creates or reuses the KV namespace, prompts for each secret, generates the cookie key, and deploys. It is safe to re-run — every step can be skipped.</p>
 
 <h2><span class="n">3</span> Decide who may sign in</h2>
 <p><code>ALLOWED_EMAILS</code> is checked against the address Google reports as verified, after consent and before any grant exists.</p>
@@ -184,8 +183,8 @@ bun run setup</pre>
 <p>No client ID or secret on the client side — MCP clients register themselves.</p>
 
 <div class="card copy">
-<pre id="c3">claude mcp add --transport http gmail-personal https://&lt;your-domain&gt;/mcp
-claude mcp add --transport http gmail-work     https://&lt;your-domain&gt;/mcp/work</pre>
+<pre id="c3">claude mcp add --transport http gmail-personal https://&lt;your-host&gt;/mcp
+claude mcp add --transport http gmail-work     https://&lt;your-host&gt;/mcp/work</pre>
 <button data-copy="c3">copy</button>
 </div>
 
@@ -206,6 +205,15 @@ claude mcp add --transport http gmail-work     https://&lt;your-domain&gt;/mcp/w
 
 </div>
 <script>
+  // The page is served by the deployment it describes, so the host in the
+  // address bar is the one Google and the clients have to be told about. The
+  // copy buttons then hand over commands that need no editing.
+  for (const el of document.querySelectorAll('pre')) {
+    if (el.textContent.includes('<your-host>')) {
+      el.textContent = el.textContent.replaceAll('<your-host>', location.host);
+    }
+  }
+
   for (const b of document.querySelectorAll('.copy button')) {
     b.addEventListener('click', async () => {
       await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);

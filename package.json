@@ -15,6 +15,22 @@
 		"check:render": "python3 scripts/check-render.py",
 		"check:counts": "python3 scripts/check-counts.py"
 	},
+	"cloudflare": {
+		"bindings": {
+			"GOOGLE_CLIENT_ID": {
+				"description": "Client id of a Google OAuth 2.0 Web application client, from https://console.cloud.google.com/apis/credentials with the Gmail API enabled."
+			},
+			"GOOGLE_CLIENT_SECRET": {
+				"description": "Client secret of that same Google OAuth client."
+			},
+			"COOKIE_ENCRYPTION_KEY": {
+				"description": "Random 32 bytes as hex, from `openssl rand -hex 32`. It signs the approval cookie the sign-in flow sets."
+			},
+			"ALLOWED_EMAILS": {
+				"description": "Who may sign in, checked against the address Google reports as verified: a comma-separated list, *@your-domain.com, or * for any Google account. Empty means nobody."
+			}
+		}
+	},
 	"dependencies": {
 		"@cloudflare/workers-oauth-provider": "^0.8.1",
 		"@modelcontextprotocol/sdk": "^1.10.2",

@@ -59,7 +59,7 @@
 
 ## 部署
 
-大约十分钟。需要一个挂了域名的Cloudflare账号、[bun](https://bun.sh)和一个Google账号。
+大约十分钟。需要一个Cloudflare账号、[bun](https://bun.sh)和一个Google账号。域名可有可无，没有的话Worker用workers.dev的主机名对外服务。
 
 ### 1 · 创建Google OAuth客户端
 
@@ -74,31 +74,38 @@ gcloud services enable gmail.googleapis.com
 接下来两步Google没有开放API，只能在[Google Cloud控制台](https://console.cloud.google.com/)里做：
 
 - [**OAuth同意屏幕**](https://console.cloud.google.com/auth/overview) → *External*。应用未通过验证期间，把计划连接的每个邮箱加进**测试用户**。
-- [**凭据**](https://console.cloud.google.com/apis/credentials) **→ 创建凭据 → OAuth客户端ID** → *Web应用*，把`https://<你的域名>/callback`加进已获授权的重定向URI。客户端ID和密钥记下来。
+- [**凭据**](https://console.cloud.google.com/apis/credentials) **→ 创建凭据 → OAuth客户端ID** → *Web应用*，把`https://<你的主机名>/callback`加进已获授权的重定向URI。客户端ID和密钥记下来。
+
+`<你的主机名>`是你指向Worker的域名，或者它拿到的workers.dev主机名。先部署再回来填也行，Worker在`/`提供的那份指南里写着确切的值。
 
 ### 2 · 部署Worker
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mkpoli/gmail-mcp)
+
+按钮会把仓库复制到你的GitHub账号，建好KV命名空间和Durable Object，再逐个问你那四个密钥。部署位置是workers.dev，自定义域名之后在**Settings → Domains & Routes**里挂上。
+
+用终端的话：
 
 ```sh
 git clone https://github.com/mkpoli/gmail-mcp && cd gmail-mcp
 bun install
-# 在wrangler.jsonc里把`name`和routes的`pattern`改成你的域名
 bun run setup
 ```
 
-`bun run setup`会询问客户端ID和密钥，生成cookie密钥，然后部署。`wrangler.jsonc`里写的`OAUTH_KV`的id属于这个服务器所在的账号，所以setup会先看它在不在你的账号里，不在就问你要不要新建一个命名空间。之后只为轮换某一个密钥重跑也没问题。
+`bun run setup`会问用哪个域名对外服务，创建或复用`OAUTH_KV`命名空间，收下客户端ID和密钥，生成cookie密钥，然后部署。前两个答案落在`wrangler.local.jsonc`里，git不跟踪它；`wrangler.jsonc`里既没有谁的命名空间也没有谁的域名，克隆下来可以直接部署到任何账号。之后只为轮换某一个密钥重跑也没问题。
 
 ### 3 · 连接客户端
 
 客户端ID和密钥两栏留空，MCP客户端会自行注册。
 
 ```sh
-claude mcp add --transport http gmail-personal https://<你的域名>/mcp
-claude mcp add --transport http gmail-work     https://<你的域名>/mcp/work
+claude mcp add --transport http gmail-personal https://<你的主机名>/mcp
+claude mcp add --transport http gmail-work     https://<你的主机名>/mcp/work
 ```
 
 在Claude Code里执行`/mcp`，把每条连接登录到对应的Google账号。claude.ai里的入口是**设置 → 连接器 → 添加自定义连接器**，填同一个URL。`/mcp/`后面可以接任意单段标签；有些客户端不接受两个服务器共用一个URL，靠这个办法，一份部署照样能给它们提供多个邮箱。
 
-部署完成后，`https://<你的域名>/`本身就提供这份指南。
+部署完成后，`https://<你的主机名>/`本身就提供这份指南。
 
 ---
 

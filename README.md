@@ -71,7 +71,7 @@ Two design differences decide most of the rest. Routing accounts by a call argum
 
 ## Deploy it
 
-About ten minutes. You need a Cloudflare account with a domain on it, [bun](https://bun.sh), and a Google account.
+About ten minutes. You need a Cloudflare account, [bun](https://bun.sh), and a Google account. A domain on the Cloudflare account is optional — without one the Worker answers on `workers.dev`.
 
 ### 1 · Create a Google OAuth client
 
@@ -86,31 +86,38 @@ gcloud services enable gmail.googleapis.com
 Google exposes no API for the next two steps, so they happen in the [Cloud console](https://console.cloud.google.com/):
 
 - [**OAuth consent screen**](https://console.cloud.google.com/auth/overview) → *External*. While the app is unverified, add each mailbox you plan to connect under **Test users**.
-- [**Credentials**](https://console.cloud.google.com/apis/credentials) **→ Create credentials → OAuth client ID** → *Web application*, with `https://<your-domain>/callback` as an authorized redirect URI. Keep the client ID and secret.
+- [**Credentials**](https://console.cloud.google.com/apis/credentials) **→ Create credentials → OAuth client ID** → *Web application*, with `https://<your-host>/callback` as an authorized redirect URI. Keep the client ID and secret.
+
+`<your-host>` is the domain you point at the Worker, or the `workers.dev` hostname it gets otherwise. Deploying first and coming back to fill this in works — the guide the Worker serves at `/` shows the exact value.
 
 ### 2 · Deploy the Worker
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/mkpoli/gmail-mcp)
+
+The button copies the repository into your GitHub account, creates the KV namespace and the Durable Object, and asks for the four secrets. It deploys to `workers.dev`; a custom domain is attached afterwards under **Settings → Domains & Routes**.
+
+From a terminal instead:
 
 ```sh
 git clone https://github.com/mkpoli/gmail-mcp && cd gmail-mcp
 bun install
-# in wrangler.jsonc, set `name` and the routes `pattern` to your domain
 bun run setup
 ```
 
-`bun run setup` asks for the client ID and secret, generates a cookie key, and deploys. The `OAUTH_KV` id committed in `wrangler.jsonc` belongs to the account this server runs on, so setup checks whether it is one of yours and offers to create your own namespace when it is not. Re-running it to rotate a single secret is safe.
+`bun run setup` asks which domain to answer on, creates or reuses the `OAUTH_KV` namespace, takes the client ID and secret, generates a cookie key, and deploys. Those first two answers land in `wrangler.local.jsonc`, which git ignores — `wrangler.jsonc` names no account's namespace and no one's domain, so a clone deploys anywhere. Re-running setup to rotate a single secret is safe.
 
 ### 3 · Connect a client
 
 Leave the client ID and secret fields empty — MCP clients register themselves.
 
 ```sh
-claude mcp add --transport http gmail-personal https://<your-domain>/mcp
-claude mcp add --transport http gmail-work     https://<your-domain>/mcp/work
+claude mcp add --transport http gmail-personal https://<your-host>/mcp
+claude mcp add --transport http gmail-work     https://<your-host>/mcp/work
 ```
 
 Run `/mcp` in Claude Code to sign each connection in to its Google account. In claude.ai it is **Settings → Connectors → Add custom connector** with the same URL. Any single-segment label works after `/mcp/`, which is how one deployment serves several mailboxes to clients that reject two servers sharing a URL.
 
-Your deployment serves this guide at `https://<your-domain>/`.
+Your deployment serves this guide at `https://<your-host>/`.
 
 ---
 
