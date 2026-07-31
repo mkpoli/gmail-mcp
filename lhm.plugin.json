@@ -1,0 +1,803 @@
+{
+  "identifier": "mkpoli-gmail-mcp",
+  "name": "Gmail MCP",
+  "version": "0.1.0",
+  "description": "Multi-account Gmail on a Cloudflare Worker you deploy yourself: search and read mail, send, reply-all with quoted history, forward, attachments and inline images, drafts, labels, and threads. Each connection binds to one Google account and the refresh token stays in your own Cloudflare account.",
+  "author": "mkpoli",
+  "authorUrl": "https://github.com/mkpoli",
+  "icon": "✉️",
+  "tags": [
+    "gmail",
+    "email",
+    "google",
+    "cloudflare-workers",
+    "oauth",
+    "self-hosted",
+    "multi-account",
+    "remote-mcp"
+  ],
+  "tools": [
+    {
+      "name": "whoami",
+      "description": "Show which Gmail account this connection is bound to (the connected account)",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "search_messages",
+      "description": "Search mail in the connected account with Gmail query syntax (from:, to:, subject:, is:unread, newer_than:7d, ...)",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Gmail search query"
+          },
+          "maxResults": {
+            "default": 10,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "pageToken": {
+            "description": "nextPageToken from a previous search",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_message",
+      "description": "Read a full message from the connected account, including decoded body text",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId"
+        ]
+      }
+    },
+    {
+      "name": "get_thread",
+      "description": "Read a conversation thread from the connected account. Bodies share a total budget, so long threads come back summarized — read individual messages with get_message",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "threadId": {
+            "type": "string"
+          },
+          "includeBodies": {
+            "default": true,
+            "description": "false returns headers and snippets only",
+            "type": "boolean"
+          },
+          "maxMessages": {
+            "default": 10,
+            "description": "Newest messages are kept when a thread exceeds this",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "threadId"
+        ]
+      }
+    },
+    {
+      "name": "list_labels",
+      "description": "List labels in the connected account",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "modify_labels",
+      "description": "Add or remove labels on a message in the connected account (also archives: remove INBOX; marks read: remove UNREAD)",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "type": "string"
+          },
+          "addLabelIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removeLabelIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "messageId"
+        ]
+      }
+    },
+    {
+      "name": "trash_message",
+      "description": "Move a message to the trash in the connected account (reversible for 30 days)",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId"
+        ]
+      }
+    },
+    {
+      "name": "create_draft",
+      "description": "Create a draft in the connected account without sending",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "Plain-text body"
+          },
+          "htmlBody": {
+            "description": "HTML alternative shown by rich clients",
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "bcc": {
+            "type": "string"
+          },
+          "from": {
+            "description": "Send-as alias already configured in the account",
+            "type": "string"
+          },
+          "attachments": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "filename": {
+                  "type": "string"
+                },
+                "contentType": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "File data as standard base64"
+                }
+              },
+              "required": [
+                "filename",
+                "contentType",
+                "content"
+              ]
+            }
+          },
+          "inlineImages": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cid": {
+                  "type": "string",
+                  "description": "Content-ID referenced from the HTML as <img src=\"cid:...\">"
+                },
+                "contentType": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Image data as standard base64"
+                }
+              },
+              "required": [
+                "cid",
+                "contentType",
+                "content"
+              ]
+            }
+          }
+        },
+        "required": [
+          "to",
+          "subject",
+          "body"
+        ]
+      }
+    },
+    {
+      "name": "update_draft",
+      "description": "Replace the content of a draft in the connected account",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "draftId": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "Plain-text body"
+          },
+          "htmlBody": {
+            "description": "HTML alternative shown by rich clients",
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "bcc": {
+            "type": "string"
+          },
+          "from": {
+            "description": "Send-as alias already configured in the account",
+            "type": "string"
+          },
+          "attachments": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "filename": {
+                  "type": "string"
+                },
+                "contentType": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "File data as standard base64"
+                }
+              },
+              "required": [
+                "filename",
+                "contentType",
+                "content"
+              ]
+            }
+          },
+          "inlineImages": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cid": {
+                  "type": "string",
+                  "description": "Content-ID referenced from the HTML as <img src=\"cid:...\">"
+                },
+                "contentType": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Image data as standard base64"
+                }
+              },
+              "required": [
+                "cid",
+                "contentType",
+                "content"
+              ]
+            }
+          }
+        },
+        "required": [
+          "draftId",
+          "to",
+          "subject",
+          "body"
+        ]
+      }
+    },
+    {
+      "name": "send_draft",
+      "description": "Send an existing draft from the connected account",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "draftId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "draftId"
+        ]
+      }
+    },
+    {
+      "name": "delete_draft",
+      "description": "Delete a draft in the connected account permanently (drafts have no trash)",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "draftId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "draftId"
+        ]
+      }
+    },
+    {
+      "name": "list_drafts",
+      "description": "List drafts in the connected account",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "maxResults": {
+            "default": 10,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "pageToken": {
+            "description": "nextPageToken from a previous listing",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "send_message",
+      "description": "Send mail as the connected account. For replies pass threadId plus the original's Message-ID header, or its Gmail message id, as inReplyTo",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "Plain-text body"
+          },
+          "htmlBody": {
+            "description": "HTML alternative shown by rich clients",
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "bcc": {
+            "type": "string"
+          },
+          "from": {
+            "description": "Send-as alias already configured in the account",
+            "type": "string"
+          },
+          "attachments": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "filename": {
+                  "type": "string"
+                },
+                "contentType": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "File data as standard base64"
+                }
+              },
+              "required": [
+                "filename",
+                "contentType",
+                "content"
+              ]
+            }
+          },
+          "inlineImages": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cid": {
+                  "type": "string",
+                  "description": "Content-ID referenced from the HTML as <img src=\"cid:...\">"
+                },
+                "contentType": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Image data as standard base64"
+                }
+              },
+              "required": [
+                "cid",
+                "contentType",
+                "content"
+              ]
+            }
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "inReplyTo": {
+            "description": "Message-ID header value of the message being replied to; a Gmail message id is resolved to it",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to",
+          "subject",
+          "body"
+        ]
+      }
+    },
+    {
+      "name": "reply_all",
+      "description": "Reply to a message in the connected account, addressing every original recipient except this account, with the original quoted",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "description": "The message being replied to"
+          },
+          "body": {
+            "type": "string",
+            "description": "Plain-text reply, without quoted history"
+          },
+          "htmlBody": {
+            "description": "HTML reply, without quoted history",
+            "type": "string"
+          },
+          "attachments": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "filename": {
+                  "type": "string"
+                },
+                "contentType": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "File data as standard base64"
+                }
+              },
+              "required": [
+                "filename",
+                "contentType",
+                "content"
+              ]
+            }
+          },
+          "inlineImages": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cid": {
+                  "type": "string",
+                  "description": "Content-ID referenced from the HTML as <img src=\"cid:...\">"
+                },
+                "contentType": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Image data as standard base64"
+                }
+              },
+              "required": [
+                "cid",
+                "contentType",
+                "content"
+              ]
+            }
+          }
+        },
+        "required": [
+          "messageId",
+          "body"
+        ]
+      }
+    },
+    {
+      "name": "forward_message",
+      "description": "Forward a message from the connected account, quoting the original above its own headers",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "description": "The message being forwarded"
+          },
+          "to": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "body": {
+            "default": "",
+            "description": "Your own note above the forwarded content",
+            "type": "string"
+          },
+          "htmlBody": {
+            "type": "string"
+          },
+          "includeAttachments": {
+            "default": false,
+            "description": "Re-attach the original's files, within the attachment size budget",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "messageId",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "get_attachment",
+      "description": "Download an attachment from a message in the connected account. Returns base64 while it stays small enough to read; text types come back decoded",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "type": "string"
+          },
+          "attachmentId": {
+            "type": "string",
+            "description": "From the message listing; Gmail reissues it on every read"
+          },
+          "filename": {
+            "description": "Names the attachment when a message carries more than one",
+            "type": "string"
+          },
+          "textOnly": {
+            "default": false,
+            "description": "Return only decoded text for text/* attachments, no base64",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "messageId",
+          "attachmentId"
+        ]
+      }
+    },
+    {
+      "name": "untrash_message",
+      "description": "Restore a message from the trash in the connected account",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "messageId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId"
+        ]
+      }
+    },
+    {
+      "name": "modify_thread_labels",
+      "description": "Add or remove labels on every message of a thread in the connected account",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "threadId": {
+            "type": "string"
+          },
+          "addLabelIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removeLabelIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "threadId"
+        ]
+      }
+    },
+    {
+      "name": "trash_thread",
+      "description": "Move a whole thread to the trash in the connected account (reversible for 30 days)",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId"
+        ]
+      }
+    },
+    {
+      "name": "untrash_thread",
+      "description": "Restore a whole thread from the trash in the connected account",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId"
+        ]
+      }
+    },
+    {
+      "name": "batch_modify_messages",
+      "description": "Add or remove labels on up to 1000 messages of the connected account in one call (archive: remove INBOX; mark read: remove UNREAD)",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "messageIds": {
+            "minItems": 1,
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "addLabelIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removeLabelIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "messageIds"
+        ]
+      }
+    },
+    {
+      "name": "create_label",
+      "description": "Create a label in the connected account",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Nested labels use '/', e.g. Projects/Website"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "update_label",
+      "description": "Rename a label in the connected account",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "labelId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "labelId",
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "delete_label",
+      "description": "Delete a label in the connected account (messages keep their other labels)",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "labelId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "labelId"
+        ]
+      }
+    }
+  ],
+  "localizations": [
+    {
+      "locale": "ja-JP",
+      "name": "Gmail MCP",
+      "description": "自分のCloudflare Workerで動かすGmailサーバー。メールの検索・閲覧、送信、全員返信（原文引用つき）、転送、添付とインライン画像、下書き、ラベル、スレッドを扱えます。接続ごとに1つのGoogleアカウントへ紐づき、リフレッシュトークンは自分のCloudflareアカウントから外に出ません。"
+    },
+    {
+      "locale": "zh-CN",
+      "name": "Gmail MCP",
+      "description": "跑在自己Cloudflare Worker上的Gmail服务器：搜索和阅读邮件，发送，带引用的全员回复，转发，附件和内嵌图片，草稿、标签、会话。每条连接绑定一个Google账号，刷新令牌不出你自己的Cloudflare账号。"
+    }
+  ]
+}
