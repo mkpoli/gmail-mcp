@@ -3,6 +3,28 @@
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
+	"description": "Multi-account Gmail on a Cloudflare Worker you deploy yourself: search and read mail, send, reply-all with quoted history, forward, attachments, drafts, labels, and threads, over MCP",
+	"license": "MIT",
+	"author": "mkpoli",
+	"homepage": "https://github.com/mkpoli/gmail-mcp#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/mkpoli/gmail-mcp.git"
+	},
+	"bugs": {
+		"url": "https://github.com/mkpoli/gmail-mcp/issues"
+	},
+	"keywords": [
+		"mcp",
+		"model-context-protocol",
+		"mcp-server",
+		"gmail",
+		"email",
+		"google",
+		"cloudflare-workers",
+		"oauth"
+	],
+	"mcpName": "io.github.mkpoli/gmail-mcp",
 	"scripts": {
 		"dev": "wrangler dev",
 		"deploy": "wrangler deploy",
