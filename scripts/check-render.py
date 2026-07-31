@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Render each README through GitHub's renderer; fail if markup leaks to the reader."""
 import re, subprocess, sys
+from html import unescape
 
 status = 0
 for f in ["README.md", "README.ja.md", "README.zh.md"]:
@@ -20,7 +21,8 @@ for f in ["README.md", "README.ja.md", "README.zh.md"]:
     # every bold span declared in source must appear as <strong>
     src = open(f, encoding="utf-8").read()
     src_no_code = re.sub(r"```.*?```", "", src, flags=re.S)
-    strongs = {re.sub(r"<[^>]+>", "", s) for s in re.findall(r"<strong>(.*?)</strong>", html, re.S)}
+    # &, < and > come back as entities, so compare the text a reader sees
+    strongs = {unescape(re.sub(r"<[^>]+>", "", s)) for s in re.findall(r"<strong>(.*?)</strong>", html, re.S)}
     for b in re.findall(r"\*\*([^*\n]+)\*\*", src_no_code):
         key = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", b).replace("`", "").strip()
         if not key:
