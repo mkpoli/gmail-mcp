@@ -7,6 +7,7 @@ import {
 	b64urlEncode,
 	b64urlToStandard,
 	buildRfc822,
+	bytesToB64,
 	canonicalAddress,
 	decodeAttachmentText,
 	decodeEncodedWords,
@@ -85,17 +86,67 @@ const SEND_AS_TTL_MS = 24 * 60 * 60 * 1000;
 // What the MCP transport itself allows a single message to be.
 const MCP_MESSAGE_LIMIT = 4 * 1024 * 1024;
 
+// Staged attachments: file bytes held in the session's own storage so that a
+// message can carry a file whose base64 would never fit through tool
+// arguments. How long an unused staging lives before it is swept.
+const STAGED_TTL_MS = 24 * 60 * 60 * 1000;
+// A stored slice of staged base64. Durable Object values carry up to 2 MB;
+// staying at half leaves the metadata beside it out of the reckoning.
+const STAGED_CHUNK_CHARS = 1_000_000;
+// One appended chunk is stored as one value, so it shares that ceiling.
+const MAX_APPEND_CHARS = 1_000_000;
+// Raw upload ceiling: these bytes encode to MAX_ENCODED_ATTACHMENT_BYTES of
+// base64, which is where the message builder draws its own line.
+const MAX_RAW_UPLOAD_BYTES = 6_000_000;
+// Everything staged at once, across files. A session stages a file, attaches
+// it, and moves on; holding several messages' worth is not what this is for.
+const MAX_STAGED_TOTAL_CHARS = 32_000_000;
+
+// What a staging holds beside its chunks. The secret gates the upload URL:
+// whoever holds it may fill this one staging, and nothing else.
+type StagedMeta = {
+	filename: string;
+	contentType: string;
+	secret: string;
+	at: number;
+	sealed: boolean;
+	chunks: number;
+	encodedLength: number;
+	// Base64 "=" count seen so far. Padding closes the stream, so anything
+	// after it cannot be part of the same file.
+	padding: number;
+};
+
 const filePartSchema = z.object({
-	filename: z.string(),
-	contentType: z.string(),
-	content: z.string().describe("File data as standard base64"),
+	filename: z.string().optional().describe("Required with content; a staged file brings its own"),
+	contentType: z
+		.string()
+		.optional()
+		.describe("Required with content; a staged file brings its own"),
+	content: z
+		.string()
+		.optional()
+		.describe("File data as standard base64, for files small enough to pass inline"),
+	stagingId: z
+		.string()
+		.optional()
+		.describe("A staged file from the stage_attachment tools, instead of content"),
 });
+type FilePartArg = z.infer<typeof filePartSchema>;
 
 const inlineImageSchema = z.object({
 	cid: z.string().describe('Content-ID referenced from the HTML as <img src="cid:...">'),
-	contentType: z.string(),
-	content: z.string().describe("Image data as standard base64"),
+	contentType: z
+		.string()
+		.optional()
+		.describe("Required with content; a staged image brings its own"),
+	content: z.string().optional().describe("Image data as standard base64"),
+	stagingId: z
+		.string()
+		.optional()
+		.describe("A staged image from the stage_attachment tools, instead of content"),
 });
+type InlineImageArg = z.infer<typeof inlineImageSchema>;
 
 export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
@@ -106,11 +157,24 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	// The account this object serves, from the header the OAuth boundary stamps.
 	private callerAccount: string | null = null;
 
+	// Where this deployment answers, read off arriving traffic. It names the
+	// host in upload URLs, which is the one thing a Worker cannot know about
+	// itself without being told.
+	private origin: string | null = null;
+
 	// A session belongs to the first account that opens it. Durable Object
 	// storage settles that here rather than in KV, whose writes take up to a
 	// minute to reach another location and resolve by last write — long enough
 	// for a second account to read no owner and be admitted.
 	override async fetch(request: Request): Promise<Response> {
+		const url = new URL(request.url);
+		this.origin = url.origin;
+		// A staged upload authenticates by its address alone: the boundary sends
+		// it here without a grant, and the secret in the path is what
+		// stage_attachment_begin handed the session that asked for it.
+		if (url.pathname.startsWith("/upload/")) {
+			return this.acceptUpload(request, url);
+		}
 		const account = request.headers.get(ACCOUNT_HEADER)?.toLowerCase();
 		if (account) {
 			const owner = await this.ctx.storage.get<string>("owner");
@@ -337,6 +401,169 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		return decodeAttachmentText(att.data, ref.mimeType, ref.charset);
 	}
 
+	// ---- Staged attachments -------------------------------------------------
+
+	// The upload URL half of staging: raw bytes arrive in one PUT, are encoded
+	// here, and seal the staging themselves. Failures answer with the same 404
+	// whether the id or the secret was wrong: the address either works or it
+	// does not.
+	private async acceptUpload(request: Request, url: URL): Promise<Response> {
+		if (request.method !== "PUT") {
+			return new Response("PUT the raw file bytes to this URL", { status: 405 });
+		}
+		const [, , , stagingId, secret] = url.pathname.split("/").map(decodeURIComponent);
+		const meta = stagingId
+			? await this.ctx.storage.get<StagedMeta>(`staged:${stagingId}`)
+			: undefined;
+		// The secret is an unguessable 122-bit UUID compared against storage this
+		// object alone reads, so equality is the whole check.
+		if (!meta || meta.secret !== secret || Date.now() - meta.at > STAGED_TTL_MS) {
+			return new Response("no staging answers to this address", { status: 404 });
+		}
+		if (meta.sealed || meta.chunks > 0) {
+			return new Response("this staging already holds data", { status: 409 });
+		}
+		let bytes: Uint8Array;
+		try {
+			bytes = await readBoundedBody(request, MAX_RAW_UPLOAD_BYTES);
+		} catch (error: unknown) {
+			if (error instanceof BodyTooLarge) {
+				return new Response(`the upload exceeds ${MAX_RAW_UPLOAD_BYTES} bytes`, { status: 413 });
+			}
+			throw error;
+		}
+		const encoded = bytesToB64(bytes);
+		const chunks = Math.ceil(encoded.length / STAGED_CHUNK_CHARS);
+		for (let i = 0; i < chunks; i++) {
+			await this.ctx.storage.put(
+				`staged:${stagingId}:chunk:${i}`,
+				encoded.slice(i * STAGED_CHUNK_CHARS, (i + 1) * STAGED_CHUNK_CHARS),
+			);
+		}
+		await this.ctx.storage.put(`staged:${stagingId}`, {
+			...meta,
+			sealed: true,
+			chunks,
+			encodedLength: encoded.length,
+			padding: encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0,
+		} satisfies StagedMeta);
+		return Response.json({
+			stagingId,
+			filename: meta.filename,
+			contentType: meta.contentType,
+			size: bytes.length,
+		});
+	}
+
+	// Sweeps stagings past their lifetime and reports how much the live ones
+	// hold, which is what bounds the store as a whole.
+	private async sweepStaged(): Promise<number> {
+		const entries = await this.ctx.storage.list<StagedMeta>({ prefix: "staged:" });
+		const dead: string[] = [];
+		let liveChars = 0;
+		for (const [key, meta] of entries) {
+			if (key.includes(":chunk:")) continue;
+			if (Date.now() - meta.at > STAGED_TTL_MS) {
+				dead.push(key);
+				for (let i = 0; i < meta.chunks; i++) dead.push(`${key}:chunk:${i}`);
+			} else {
+				liveChars += meta.encodedLength;
+			}
+		}
+		// A delete takes at most 128 keys at a time.
+		for (let i = 0; i < dead.length; i += 128) {
+			await this.ctx.storage.delete(dead.slice(i, i + 128));
+		}
+		return liveChars;
+	}
+
+	private async stagedMeta(stagingId: string): Promise<StagedMeta> {
+		const meta = await this.ctx.storage.get<StagedMeta>(`staged:${stagingId}`);
+		if (!meta || Date.now() - meta.at > STAGED_TTL_MS) {
+			throw new Error(
+				`no staged attachment ${stagingId}; stage_attachment_begin starts one, and a staging lasts ${STAGED_TTL_MS / 3_600_000} hours`,
+			);
+		}
+		return meta;
+	}
+
+	private async stagedContent(
+		stagingId: string,
+	): Promise<{ filename: string; contentType: string; content: string }> {
+		const meta = await this.stagedMeta(stagingId);
+		if (!meta.sealed) {
+			throw new Error(
+				`staged attachment ${stagingId} is not finished; stage_attachment_finish seals appended chunks, an upload seals itself`,
+			);
+		}
+		const parts: string[] = [];
+		for (let i = 0; i < meta.chunks; i++) {
+			const chunk = await this.ctx.storage.get<string>(`staged:${stagingId}:chunk:${i}`);
+			if (chunk === undefined) {
+				throw new Error(`staged attachment ${stagingId} lost a chunk; stage the file again`);
+			}
+			parts.push(chunk);
+		}
+		return { filename: meta.filename, contentType: meta.contentType, content: parts.join("") };
+	}
+
+	// One part may bring its bytes inline or point at a staging, never both.
+	private async resolveStaged(
+		part: { content?: string | undefined; stagingId?: string | undefined },
+		what: string,
+	): Promise<{ filename: string; contentType: string; content: string } | null> {
+		if (part.stagingId !== undefined && part.content !== undefined) {
+			throw new Error(`${what} carries either content or stagingId, never both`);
+		}
+		if (part.stagingId !== undefined) return this.stagedContent(part.stagingId);
+		if (part.content === undefined) {
+			throw new Error(`${what} needs content or stagingId`);
+		}
+		return null;
+	}
+
+	private async resolveAttachments(parts: FilePartArg[] | undefined): Promise<FilePart[]> {
+		return Promise.all(
+			(parts ?? []).map(async (part) => {
+				const staged = await this.resolveStaged(part, "an attachment");
+				if (staged) {
+					return {
+						filename: part.filename ?? staged.filename,
+						contentType: part.contentType ?? staged.contentType,
+						content: staged.content,
+					};
+				}
+				if (part.filename === undefined || part.contentType === undefined) {
+					throw new Error("an attachment passed as content needs filename and contentType");
+				}
+				return {
+					filename: part.filename,
+					contentType: part.contentType,
+					content: part.content ?? "",
+				};
+			}),
+		);
+	}
+
+	private async resolveInlineImages(parts: InlineImageArg[] | undefined): Promise<InlineImage[]> {
+		return Promise.all(
+			(parts ?? []).map(async (part) => {
+				const staged = await this.resolveStaged(part, "an inline image");
+				if (staged) {
+					return {
+						cid: part.cid,
+						contentType: part.contentType ?? staged.contentType,
+						content: staged.content,
+					};
+				}
+				if (part.contentType === undefined) {
+					throw new Error("an inline image passed as content needs contentType");
+				}
+				return { cid: part.cid, contentType: part.contentType, content: part.content ?? "" };
+			}),
+		);
+	}
+
 	// Reads back the enclosed parts a rebuilt draft keeps. Failing is deliberate:
 	// a rebuild that cannot read a file back would otherwise write a draft with
 	// the file quietly gone, which the person editing has no way to notice until
@@ -380,9 +607,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	// was passed, and otherwise whatever the draft already carries.
 	private async keptFiles(
 		m: GmailMessage,
-		attachments: FilePart[] | undefined,
+		attachments: FilePartArg[] | undefined,
 	): Promise<FilePart[]> {
-		if (attachments !== undefined) return attachments;
+		if (attachments !== undefined) return this.resolveAttachments(attachments);
 		return this.carryOver(m, draftContentParts(m.payload).files, (ref, content) => ({
 			filename: ref.filename,
 			contentType: ref.contentType,
@@ -395,10 +622,10 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	// passed explicitly are the caller's to pair with their own HTML.
 	private async keptImages(
 		m: GmailMessage,
-		inlineImages: InlineImage[] | undefined,
+		inlineImages: InlineImageArg[] | undefined,
 		htmlBody: string | undefined,
 	): Promise<InlineImage[]> {
-		if (inlineImages !== undefined) return inlineImages;
+		if (inlineImages !== undefined) return this.resolveInlineImages(inlineImages);
 		if (htmlBody === undefined) return [];
 		return this.carryOver(m, draftContentParts(m.payload).inline, (ref, content) => ({
 			cid: ref.cid,
@@ -526,8 +753,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		cc?: string | undefined;
 		bcc?: string | undefined;
 		from?: string | undefined;
-		attachments: FilePart[];
-		inlineImages: InlineImage[];
+		attachments: FilePartArg[] | undefined;
+		inlineImages: InlineImageArg[] | undefined;
 	}) {
 		const reply = await this.replyContext(replyToMessageId);
 		// A caller that names its own recipients owns all of them: mixing a
@@ -547,8 +774,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				subject: subject ?? reply.subject,
 				body: quote ? `${body}\n\n${reply.quotedPlain}` : body,
 				htmlBody: htmlBody && quote ? `${htmlBody}\n<br>\n${reply.quotedHtml}` : htmlBody,
-				attachments,
-				inlineImages,
+				attachments: await this.resolveAttachments(attachments),
+				inlineImages: await this.resolveInlineImages(inlineImages),
 				inReplyTo: reply.inReplyTo,
 				references: reply.references,
 			}),
@@ -772,7 +999,16 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 						"a fresh draft needs to and subject; a reply derives them from replyToMessageId",
 					);
 				}
-				const raw = b64urlEncode(buildRfc822({ to, subject, body, ...rest }));
+				const raw = b64urlEncode(
+					buildRfc822({
+						to,
+						subject,
+						body,
+						...rest,
+						attachments: await this.resolveAttachments(rest.attachments),
+						inlineImages: await this.resolveInlineImages(rest.inlineImages),
+					}),
+				);
 				const d = await this.api<DraftResult>("/drafts", {
 					method: "POST",
 					body: JSON.stringify({ message: { raw } }),
@@ -941,6 +1177,123 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		);
 
 		this.server.tool(
+			"stage_attachment_begin",
+			`Stage a file for ${account} outside tool arguments, for attachments whose base64 is too large to pass inline. Then either PUT the raw file bytes to the returned uploadUrl (curl -T <file> '<uploadUrl>'), which finishes the staging by itself, or send base64 with stage_attachment_append and seal it with stage_attachment_finish. Any attachments or inlineImages field then accepts {"stagingId": ...}`,
+			{
+				filename: z.string(),
+				contentType: z.string().describe("Media type, e.g. application/pdf"),
+			},
+			async ({ filename, contentType }) => {
+				await this.assertSessionOwner();
+				await this.assertWithinRate();
+				// Refused here, before any bytes move: the builder would refuse the
+				// finished attachment anyway, and later is after the upload.
+				if (/[\r\n\0]/.test(filename)) {
+					throw new Error("filename contains a line break or NUL");
+				}
+				if (!/^[\w.+-]+\/[\w.+-]+$/.test(contentType)) {
+					throw new Error(`invalid content type: ${contentType}`);
+				}
+				const held = await this.sweepStaged();
+				if (held > MAX_STAGED_TOTAL_CHARS) {
+					throw new Error(
+						"the staging store is full; attach what is already staged or wait for it to expire",
+					);
+				}
+				const stagingId = crypto.randomUUID();
+				const meta: StagedMeta = {
+					filename,
+					contentType,
+					secret: crypto.randomUUID(),
+					at: Date.now(),
+					sealed: false,
+					chunks: 0,
+					encodedLength: 0,
+					padding: 0,
+				};
+				await this.ctx.storage.put(`staged:${stagingId}`, meta);
+				const name = this.ctx.id.name;
+				const uploadUrl =
+					this.origin && name
+						? `${this.origin}/upload/${encodeURIComponent(name)}/${stagingId}/${meta.secret}`
+						: undefined;
+				return this.text({
+					stagingId,
+					uploadUrl,
+					expiresAt: new Date(meta.at + STAGED_TTL_MS).toISOString(),
+					next: uploadUrl
+						? "PUT the raw file bytes to uploadUrl, or append base64 with stage_attachment_append and call stage_attachment_finish"
+						: "append base64 with stage_attachment_append, then call stage_attachment_finish",
+				});
+			},
+		);
+
+		this.server.tool(
+			"stage_attachment_append",
+			`Add base64 to a staged attachment in ${account}, in order, up to ${MAX_APPEND_CHARS} characters per call`,
+			{
+				stagingId: z.string(),
+				content: z
+					.string()
+					.describe("Standard base64; every chunk before the last must carry no padding"),
+			},
+			async ({ stagingId, content }) => {
+				await this.assertSessionOwner();
+				await this.assertWithinRate();
+				const meta = await this.stagedMeta(stagingId);
+				if (meta.sealed) {
+					throw new Error("this staging is already finished; begin a new one to replace it");
+				}
+				if (meta.padding > 0) {
+					throw new Error("an earlier chunk ended with padding, which closes the file");
+				}
+				const cleaned = content.replace(/\s+/g, "");
+				if (!/^[A-Za-z0-9+/]+={0,2}$/.test(cleaned) || cleaned.length % 4 !== 0) {
+					throw new Error("content must be standard base64 in whole four-character groups");
+				}
+				if (cleaned.length > MAX_APPEND_CHARS) {
+					throw new Error(`append at most ${MAX_APPEND_CHARS} characters per call`);
+				}
+				if (meta.encodedLength + cleaned.length > MAX_ENCODED_ATTACHMENT_BYTES) {
+					throw new Error(
+						`this file would exceed the ${MAX_ENCODED_ATTACHMENT_BYTES}-character ceiling a message can carry`,
+					);
+				}
+				await this.ctx.storage.put(`staged:${stagingId}:chunk:${meta.chunks}`, cleaned);
+				const next: StagedMeta = {
+					...meta,
+					chunks: meta.chunks + 1,
+					encodedLength: meta.encodedLength + cleaned.length,
+					padding: (cleaned.match(/=/g) ?? []).length,
+				};
+				await this.ctx.storage.put(`staged:${stagingId}`, next);
+				return this.text({ stagingId, encodedLength: next.encodedLength });
+			},
+		);
+
+		this.server.tool(
+			"stage_attachment_finish",
+			`Seal a staged attachment in ${account} so messages and drafts can attach it by stagingId`,
+			{ stagingId: z.string() },
+			async ({ stagingId }) => {
+				await this.assertSessionOwner();
+				await this.assertWithinRate();
+				const meta = await this.stagedMeta(stagingId);
+				const sealed = meta.sealed ? meta : { ...meta, sealed: true };
+				if (!meta.sealed) {
+					await this.ctx.storage.put(`staged:${stagingId}`, sealed);
+				}
+				return this.text({
+					stagingId,
+					filename: sealed.filename,
+					contentType: sealed.contentType,
+					size: (sealed.encodedLength / 4) * 3 - sealed.padding,
+					expiresAt: new Date(sealed.at + STAGED_TTL_MS).toISOString(),
+				});
+			},
+		);
+
+		this.server.tool(
 			"send_message",
 			`Send mail as ${account}. For replies pass threadId plus the original's Message-ID header, or its Gmail message id, as inReplyTo`,
 			{
@@ -984,8 +1337,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 						subject,
 						body,
 						htmlBody,
-						attachments,
-						inlineImages,
+						attachments: await this.resolveAttachments(attachments),
+						inlineImages: await this.resolveInlineImages(inlineImages),
 						inReplyTo: threadHeader,
 						references: threadHeader,
 					}),
@@ -1021,8 +1374,8 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 						subject: reply.subject,
 						body: `${body}\n\n${reply.quotedPlain}`,
 						htmlBody: htmlBody ? `${htmlBody}\n<br>\n${reply.quotedHtml}` : undefined,
-						attachments,
-						inlineImages,
+						attachments: await this.resolveAttachments(attachments),
+						inlineImages: await this.resolveInlineImages(inlineImages),
 						inReplyTo: reply.inReplyTo,
 						references: reply.references,
 					}),
@@ -1507,9 +1860,37 @@ function bodyLimitFor(path: string): number | null {
 	return null;
 }
 
+// Carries a staged upload to the session that minted its URL. The path is the
+// whole credential — session name, staging id, secret — and the session judges
+// it; out here the body is only ever streamed through. The register limiter
+// gates it because the two share a shape: no credentials up front, and each
+// call wakes or writes something that costs the deployment.
+async function uploadRoute(request: Request, env: Env, path: string): Promise<Response> {
+	if (request.method !== "PUT") {
+		return new Response("PUT the raw file bytes to an upload URL", { status: 405 });
+	}
+	const segments = path.split("/");
+	const name = decodeURIComponent(segments[2] ?? "");
+	if (segments.length !== 5 || !name) {
+		return new Response("no staging answers to this address", { status: 404 });
+	}
+	if (env.REGISTER_LIMITER) {
+		const caller = request.headers.get("cf-connecting-ip") ?? "unknown";
+		const { success } = await env.REGISTER_LIMITER.limit({ key: caller });
+		if (!success) {
+			return new Response("Too many uploads", { status: 429 });
+		}
+	}
+	const session = await getAgentByName<Env, GmailMCP>(env.MCP_OBJECT, name);
+	return session.fetch(request);
+}
+
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const path = new URL(request.url).pathname;
+		if (path.startsWith("/upload/")) {
+			return uploadRoute(request, env, path);
+		}
 		const limit = request.method === "POST" ? bodyLimitFor(path) : null;
 		if (limit === null) {
 			return provider.fetch(request, env, ctx);

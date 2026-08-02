@@ -123,7 +123,7 @@ export async function gmailFetch<T = unknown>(
 
 // Chunked binary-to-base64: a spread into String.fromCharCode overflows the
 // argument limit on bodies past a few tens of kilobytes.
-function bytesToB64(bytes: Uint8Array): string {
+export function bytesToB64(bytes: Uint8Array): string {
 	let bin = "";
 	const CHUNK = 8192;
 	for (let i = 0; i < bytes.length; i += CHUNK) {

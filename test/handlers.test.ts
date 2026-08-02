@@ -57,10 +57,16 @@ function makeAgent(email = "me@example.com") {
 		expiresAt: Date.now() + 3_600_000,
 	};
 	agent.ctx = {
+		id: { name: "streamable-http:session-1" },
 		storage: {
 			get: async (key: string) => storage.get(key),
 			put: async (key: string, value: unknown) => {
 				storage.set(key, value);
+			},
+			list: async (options?: { prefix?: string }) =>
+				new Map([...storage].filter(([key]) => key.startsWith(options?.prefix ?? ""))),
+			delete: async (keys: string | string[]) => {
+				for (const key of Array.isArray(keys) ? keys : [keys]) storage.delete(key);
 			},
 		},
 	};
@@ -518,6 +524,149 @@ describe("update_draft", () => {
 			/could not be read back/,
 		);
 		expect(requests.filter((r) => r.method === "PUT")).toHaveLength(0);
+	});
+});
+
+describe("staged attachments", () => {
+	const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+	const begin = async (handlers: Map<string, Handler>) =>
+		result(
+			await tool(
+				handlers,
+				"stage_attachment_begin",
+			)({ filename: "報告書.docx", contentType: DOCX }),
+		);
+
+	test("chunks staged in order travel into a draft", async () => {
+		const { handlers } = await boot();
+		serveGmail([[/\/drafts$/, () => ({ id: "d1", message: { id: "dm1" } })]]);
+		const { stagingId } = (await begin(handlers)) as { stagingId: string };
+		await tool(handlers, "stage_attachment_append")({ stagingId, content: btoa("hello!") });
+		await tool(handlers, "stage_attachment_append")({ stagingId, content: btoa(" world") });
+		const sealed = result(await tool(handlers, "stage_attachment_finish")({ stagingId }));
+		expect(sealed.size).toBe(12);
+
+		await tool(
+			handlers,
+			"create_draft",
+		)({ to: "a@example.com", subject: "s", body: "b", attachments: [{ stagingId }] });
+		const mime = sentMime("/drafts", "POST");
+		expect(mime).toContain(btoa("hello! world"));
+		// The staged name rides along, RFC 2231-encoded for its non-ASCII characters.
+		expect(mime).toContain("filename*=UTF-8''%E5%A0%B1%E5%91%8A%E6%9B%B8.docx");
+	});
+
+	test("append refuses base64 that cannot be joined", async () => {
+		const { handlers } = await boot();
+		serveGmail([]);
+		const { stagingId } = (await begin(handlers)) as { stagingId: string };
+		await expect(
+			tool(handlers, "stage_attachment_append")({ stagingId, content: "abc" }),
+		).rejects.toThrow(/four-character groups/);
+	});
+
+	test("an unfinished staging cannot be attached", async () => {
+		const { handlers } = await boot();
+		serveGmail([[/\/drafts$/, () => ({ id: "d1" })]]);
+		const { stagingId } = (await begin(handlers)) as { stagingId: string };
+		await tool(handlers, "stage_attachment_append")({ stagingId, content: btoa("abc") });
+		await expect(
+			tool(
+				handlers,
+				"create_draft",
+			)({ to: "a@example.com", subject: "s", body: "b", attachments: [{ stagingId }] }),
+		).rejects.toThrow(/not finished/);
+	});
+
+	test("content and stagingId together are refused", async () => {
+		const { handlers } = await boot();
+		serveGmail([[/\/drafts$/, () => ({ id: "d1" })]]);
+		await expect(
+			tool(
+				handlers,
+				"create_draft",
+			)({
+				to: "a@example.com",
+				subject: "s",
+				body: "b",
+				attachments: [
+					{ filename: "a.txt", contentType: "text/plain", content: "YQ==", stagingId: "s-1" },
+				],
+			}),
+		).rejects.toThrow(/never both/);
+	});
+
+	test("an upload of raw bytes seals the staging by itself", async () => {
+		const { agent, handlers, storage } = await boot();
+		serveGmail([[/\/messages\/send/, () => ({ id: "sent", threadId: "t1" })]]);
+		const { stagingId, uploadUrl } = (await begin(handlers)) as {
+			stagingId: string;
+			uploadUrl?: string;
+		};
+		const meta = storage.get(`staged:${stagingId}`) as { secret: string };
+		// The handler was called directly, before any request taught the object
+		// its origin, so the URL is assembled the way fetch() would have.
+		void uploadUrl;
+		const doFetch = (agent as { fetch: (r: Request) => Promise<Response> }).fetch.bind(agent);
+		const response = await doFetch(
+			new Request(
+				`https://gmail.example.com/upload/${encodeURIComponent("streamable-http:session-1")}/${stagingId}/${meta.secret}`,
+				{ method: "PUT", body: new TextEncoder().encode("raw file bytes") },
+			),
+		);
+		expect(response.status).toBe(200);
+		const sealed = (await response.json()) as { size: number; filename: string };
+		expect(sealed.size).toBe(14);
+		expect(sealed.filename).toBe("報告書.docx");
+
+		await tool(
+			handlers,
+			"send_message",
+		)({ to: "a@example.com", subject: "s", body: "b", attachments: [{ stagingId }] });
+		expect(sentMime("/messages/send")).toContain(btoa("raw file bytes"));
+	});
+
+	test("a wrong secret is turned away without a hint", async () => {
+		const { agent, handlers } = await boot();
+		serveGmail([]);
+		const { stagingId } = (await begin(handlers)) as { stagingId: string };
+		const doFetch = (agent as { fetch: (r: Request) => Promise<Response> }).fetch.bind(agent);
+		const response = await doFetch(
+			new Request(
+				`https://gmail.example.com/upload/${encodeURIComponent("streamable-http:session-1")}/${stagingId}/not-the-secret`,
+				{ method: "PUT", body: "x" },
+			),
+		);
+		expect(response.status).toBe(404);
+	});
+
+	test("expired stagings are swept when a new one begins", async () => {
+		const { handlers, storage } = await boot();
+		serveGmail([]);
+		const { stagingId } = (await begin(handlers)) as { stagingId: string };
+		await tool(handlers, "stage_attachment_append")({ stagingId, content: btoa("old") });
+		const key = `staged:${stagingId}`;
+		const meta = storage.get(key) as { at: number };
+		storage.set(key, { ...meta, at: Date.now() - 25 * 60 * 60 * 1000 });
+
+		await begin(handlers);
+		expect(storage.has(key)).toBe(false);
+		expect(storage.has(`${key}:chunk:0`)).toBe(false);
+	});
+
+	test("the public route rejects what is not an upload address", async () => {
+		const malformed = await worker.fetch(
+			new Request("https://example.com/upload/only-a-name", { method: "PUT", body: "x" }),
+			{} as never,
+			{} as never,
+		);
+		expect(malformed.status).toBe(404);
+		const wrongMethod = await worker.fetch(
+			new Request("https://example.com/upload/a/b/c"),
+			{} as never,
+			{} as never,
+		);
+		expect(wrongMethod.status).toBe(405);
 	});
 });
 
