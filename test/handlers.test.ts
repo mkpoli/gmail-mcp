@@ -333,8 +333,8 @@ describe("reply_all from a send-as alias", () => {
 });
 
 /** The MIME a call handed to Gmail, decoded from its base64url raw. */
-function sentMime(urlPart: string): string {
-	const sent = requests.find((r) => r.url.includes(urlPart));
+function sentMime(urlPart: string, method?: string): string {
+	const sent = requests.find((r) => r.url.includes(urlPart) && (!method || r.method === method));
 	const body = sent?.body as { raw?: string; message?: { raw?: string } } | undefined;
 	const encoded = String(body?.raw ?? body?.message?.raw ?? "");
 	return new TextDecoder().decode(
@@ -421,6 +421,103 @@ describe("create_draft as a reply", () => {
 		const { handlers } = await boot();
 		serveGmail([]);
 		await expect(tool(handlers, "create_draft")({ body: "b" })).rejects.toThrow(/replyToMessageId/);
+	});
+});
+
+describe("update_draft", () => {
+	// A draft as the Gmail UI leaves it after a file is added by hand: the text
+	// in an alternative pair, the file beside them, the thread already joined.
+	const draft = () => ({
+		id: "d1",
+		message: {
+			id: "dm1",
+			threadId: "t-orig",
+			payload: {
+				mimeType: "multipart/mixed",
+				headers: [
+					{ name: "To", value: "prof@example.com" },
+					{ name: "Cc", value: "assistant@example.com" },
+					{ name: "Subject", value: "=?UTF-8?B?5Y6f56i/?=" },
+					{ name: "In-Reply-To", value: "<orig@mail.example.com>" },
+					{ name: "References", value: "<root@mail.example.com> <orig@mail.example.com>" },
+				],
+				parts: [
+					{
+						mimeType: "multipart/alternative",
+						parts: [
+							{ mimeType: "text/plain", body: { data: b64url("old text") } },
+							{ mimeType: "text/html", body: { data: b64url("<p>old text</p>") } },
+						],
+					},
+					{
+						mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+						filename: "main.docx",
+						body: { attachmentId: "att-1", size: 12 },
+					},
+				],
+			},
+		},
+	});
+
+	const serve = () =>
+		serveGmail([
+			[/\/drafts\/d1\?format=full/, () => draft()],
+			[/\/messages\/dm1\/attachments\/att-1/, () => ({ size: 12, data: b64url("docx bytes!!") })],
+			[/\/drafts\/d1$/, () => ({ id: "d1", message: { id: "dm2", threadId: "t-orig" } })],
+		]);
+
+	test("a body change keeps the file, the recipients, and the thread", async () => {
+		const { handlers } = await boot();
+		serve();
+		const out = result(await tool(handlers, "update_draft")({ draftId: "d1", body: "new text" }));
+		expect(out.attachments).toEqual(["main.docx"]);
+
+		const put = requests.find((r) => r.method === "PUT");
+		const posted = (put?.body ?? {}) as { message?: { threadId?: string } };
+		expect(posted.message?.threadId).toBe("t-orig");
+
+		const mime = sentMime("/drafts/d1", "PUT");
+		expect(mime).toContain("To: prof@example.com");
+		expect(mime).toContain("Cc: assistant@example.com");
+		expect(mime).toContain("In-Reply-To: <orig@mail.example.com>");
+		expect(mime).toContain("References: <root@mail.example.com> <orig@mail.example.com>");
+		expect(mime).toContain('filename="main.docx"');
+		expect(mime).toContain(btoa("docx bytes!!"));
+		expect(mime).toContain(btoa("new text"));
+	});
+
+	test("a subject change keeps the text as written", async () => {
+		const { handlers } = await boot();
+		serve();
+		await tool(handlers, "update_draft")({ draftId: "d1", subject: "改稿" });
+		const mime = sentMime("/drafts/d1", "PUT");
+		expect(mime).toContain(btoa("old text"));
+		expect(mime).toContain(btoa("<p>old text</p>"));
+	});
+
+	test("an empty attachments list removes the files on purpose", async () => {
+		const { handlers } = await boot();
+		serve();
+		await tool(handlers, "update_draft")({ draftId: "d1", body: "b", attachments: [] });
+		const mime = sentMime("/drafts/d1", "PUT");
+		expect(mime).not.toContain("main.docx");
+		expect(requests.filter((r) => r.url.includes("/attachments/"))).toHaveLength(0);
+	});
+
+	test("refuses to rebuild when a file cannot be read back", async () => {
+		const { handlers } = await boot();
+		serveGmail([
+			[/\/drafts\/d1\?format=full/, () => draft()],
+			[
+				/\/messages\/dm1\/attachments\/att-1/,
+				() => new Response(JSON.stringify({ error: "gone" }), { status: 404 }),
+			],
+			[/\/drafts\/d1$/, () => ({ id: "d1" })],
+		]);
+		await expect(tool(handlers, "update_draft")({ draftId: "d1", body: "b" })).rejects.toThrow(
+			/could not be read back/,
+		);
+		expect(requests.filter((r) => r.method === "PUT")).toHaveLength(0);
 	});
 });
 

@@ -930,6 +930,85 @@ export function extractBody(payload: GmailPart | undefined): string {
 	return "";
 }
 
+// The HTML alternative as the sender wrote it, markup intact. extractBody
+// strips the tags because it answers a reader; a rebuild has to carry the
+// part itself, or a draft edited once would lose its formatting.
+export function extractHtmlBody(payload: GmailPart | undefined): string {
+	const html = bodyParts(payload).find((p) => p.mimeType === "text/html" && p.body?.data);
+	return html ? decodePartData(html) : "";
+}
+
+// Where a part's bytes are found when a message is rebuilt: externalised parts
+// carry an id to fetch, small ones arrive whole in data.
+type PartBytes = {
+	contentType: string;
+	attachmentId: string;
+	data: string;
+	size: number;
+};
+export type DraftFileRef = PartBytes & { filename: string };
+export type DraftInlineRef = PartBytes & { cid: string };
+
+// The enclosed parts a rebuilt message has to keep: its files, and the images
+// its HTML shows by cid. The two leave differently — a file re-attaches under
+// its name, an image under its Content-ID — and a part that carries both a
+// name and a cid is the image, or rebuilding would turn it into a plain file
+// and every <img> pointing at it would break.
+function partBytes(p: GmailPart): PartBytes | null {
+	if (p.body?.attachmentId === undefined && p.body?.data === undefined) return null;
+	return {
+		contentType: p.mimeType ?? "application/octet-stream",
+		attachmentId: p.body?.attachmentId ?? "",
+		data: p.body?.data ?? "",
+		size: p.body?.size ?? 0,
+	};
+}
+
+function partCid(p: GmailPart): string | undefined {
+	return p.headers
+		?.find((h) => h.name?.toLowerCase() === "content-id")
+		?.value?.replace(/^\s*<|>\s*$/g, "");
+}
+
+export function draftContentParts(payload: GmailPart | undefined): {
+	files: DraftFileRef[];
+	inline: DraftInlineRef[];
+} {
+	const files: DraftFileRef[] = [];
+	const inline: DraftInlineRef[] = [];
+	const walk = (p: GmailPart | undefined) => {
+		if (!p) return;
+		const type = (p.mimeType ?? "").toLowerCase();
+		const bytes = partBytes(p);
+		const cid = partCid(p);
+		if (bytes && cid && type.startsWith("image/")) {
+			inline.push({ ...bytes, cid });
+		} else if (bytes && p.filename) {
+			files.push({ ...bytes, filename: p.filename });
+		}
+		// A message enclosed as a file travels whole through its own part; the
+		// parts inside it would arrive a second time.
+		if (type.startsWith("message/") || type === "multipart/digest") return;
+		for (const child of p.parts ?? []) walk(child);
+	};
+	walk(payload);
+	return { files, inline };
+}
+
+// A References chain as it can be sent on: only ids a receiver can thread on
+// survive, with the answered message's own id appended when a reply extends
+// the chain. Every id in it arrived from a sender, and one that fails the
+// same check as In-Reply-To threads nothing on the receiving end.
+export function sanitizeReferences(
+	chain: string | undefined,
+	append?: string | null,
+): string | undefined {
+	const ids = [...(chain ?? "").split(/\s+/).map(normalizeMessageId), append ?? null].filter(
+		Boolean,
+	);
+	return ids.length > 0 ? ids.join(" ") : undefined;
+}
+
 // Gmail stores large text parts as attachments (body.attachmentId, no data);
 // callers fetch those bytes separately and decode here.
 export function textPartAttachment(

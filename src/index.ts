@@ -10,8 +10,10 @@ import {
 	canonicalAddress,
 	decodeAttachmentText,
 	decodeEncodedWords,
+	draftContentParts,
 	encodedSize,
 	extractBody,
+	extractHtmlBody,
 	type FilePart,
 	forwardHeaderBlock,
 	forwardHtmlBlock,
@@ -30,6 +32,7 @@ import {
 	quotePlain,
 	replyRecipients,
 	replySubject,
+	sanitizeReferences,
 	summarizeMessage,
 	textPartAttachment,
 	truncate,
@@ -334,6 +337,76 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		return decodeAttachmentText(att.data, ref.mimeType, ref.charset);
 	}
 
+	// Reads back the enclosed parts a rebuilt draft keeps. Failing is deliberate:
+	// a rebuild that cannot read a file back would otherwise write a draft with
+	// the file quietly gone, which the person editing has no way to notice until
+	// the mail is sent without it.
+	private async carryOver<R extends { attachmentId: string; data: string; size: number }, T>(
+		m: GmailMessage,
+		refs: R[],
+		shape: (ref: R, content: string) => T,
+	): Promise<T[]> {
+		// Counted the way the builder counts before any bytes move, so a draft
+		// too heavy to rebuild is refused up front rather than part-way through.
+		const total = refs.reduce((sum, ref) => sum + encodedSize(ref.size), 0);
+		if (total > MAX_ENCODED_ATTACHMENT_BYTES) {
+			throw new Error(
+				"this draft carries more attachment data than an update can carry over; pass attachments explicitly or edit it in a mail client",
+			);
+		}
+		const out: T[] = [];
+		for (const ref of refs) {
+			try {
+				const data = ref.attachmentId
+					? ((
+							await this.api<AttachmentBody>(
+								`/messages/${encodeURIComponent(m.id ?? "")}/attachments/${encodeURIComponent(ref.attachmentId)}`,
+							)
+						)?.data ?? "")
+					: ref.data;
+				out.push(shape(ref, b64urlToStandard(data)));
+			} catch (error: unknown) {
+				throw new Error(
+					`a file already on this draft could not be read back, so nothing was changed: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
+			}
+		}
+		return out;
+	}
+
+	// The files a rebuilt draft goes out with: the caller's own list when one
+	// was passed, and otherwise whatever the draft already carries.
+	private async keptFiles(
+		m: GmailMessage,
+		attachments: FilePart[] | undefined,
+	): Promise<FilePart[]> {
+		if (attachments !== undefined) return attachments;
+		return this.carryOver(m, draftContentParts(m.payload).files, (ref, content) => ({
+			filename: ref.filename,
+			contentType: ref.contentType,
+			content,
+		}));
+	}
+
+	// An image is shown by the HTML that names its cid, so it lives and dies
+	// with that rendering: dropping the HTML drops the images, and images
+	// passed explicitly are the caller's to pair with their own HTML.
+	private async keptImages(
+		m: GmailMessage,
+		inlineImages: InlineImage[] | undefined,
+		htmlBody: string | undefined,
+	): Promise<InlineImage[]> {
+		if (inlineImages !== undefined) return inlineImages;
+		if (htmlBody === undefined) return [];
+		return this.carryOver(m, draftContentParts(m.payload).inline, (ref, content) => ({
+			cid: ref.cid,
+			contentType: ref.contentType,
+			content,
+		}));
+	}
+
 	// A caller aiming to reply often has the Gmail message id to hand rather than
 	// the Message-ID header, and the two are not interchangeable: the API id in
 	// In-Reply-To produces a header no receiver can thread on, so the reply lands
@@ -412,15 +485,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		// thread id still carries the reply into the conversation.
 		const originalMessageId = headerValue(original, "Message-ID");
 		const messageIdHeader = originalMessageId ? normalizeMessageId(originalMessageId) : null;
-		// The chain arrives from the sender too, and an id that fails the
-		// same check threads nothing on the receiving end, so carrying it
-		// would only cost the reply.
-		const references = [
-			...(headerValue(original, "References") ?? "").split(/\s+/).map(normalizeMessageId),
-			messageIdHeader,
-		]
-			.filter(Boolean)
-			.join(" ");
+		const references = sanitizeReferences(headerValue(original, "References"), messageIdHeader);
 		const fromDisplay = decodeEncodedWords(headerValue(original, "From") ?? "unknown sender");
 		const date = headerValue(original, "Date") ?? "an earlier date";
 		const quoted = truncate(await this.messageBody(original), THREAD_BODY_LIMIT);
@@ -432,7 +497,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 			from,
 			subject: replySubject(decodeEncodedWords(headerValue(original, "Subject") ?? "")),
 			inReplyTo: messageIdHeader ?? undefined,
-			references: references || undefined,
+			references,
 			quotedPlain: quotePlain(fromDisplay, date, quoted),
 			quotedHtml: quoteHtml(fromDisplay, date, quoted),
 		};
@@ -718,8 +783,31 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 		this.server.tool(
 			"update_draft",
-			`Replace the content of a draft in ${account}`,
-			{ draftId: z.string(), ...draftFields },
+			`Change parts of a draft in ${account}. Whatever is not passed keeps its current value — recipients, subject, text, files added in any client, and the thread the draft answers all survive the rebuild`,
+			{
+				draftId: z.string(),
+				to: z.string().optional(),
+				subject: z.string().optional(),
+				body: z
+					.string()
+					.optional()
+					.describe("Plain-text body; passing it replaces the readable text as a whole"),
+				htmlBody: z
+					.string()
+					.optional()
+					.describe("HTML alternative shown by rich clients; needs body beside it"),
+				cc: z.string().optional(),
+				bcc: z.string().optional(),
+				from: z.string().optional().describe("Send-as alias already configured in the account"),
+				attachments: z
+					.array(filePartSchema)
+					.optional()
+					.describe("Omit to keep the draft's files; [] removes them"),
+				inlineImages: z
+					.array(inlineImageSchema)
+					.optional()
+					.describe("Omit to keep the images the draft's HTML shows; [] removes them"),
+			},
 			async ({
 				draftId,
 				to,
@@ -732,14 +820,67 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				attachments,
 				inlineImages,
 			}) => {
+				const current = await this.api<DraftResult>(
+					`/drafts/${encodeURIComponent(draftId)}?format=full`,
+				);
+				const m = current.message ?? {};
+				// Headers went out encoded and come back encoded; the builder encodes
+				// again, so they have to be read back to text first.
+				const existing = (name: string) => {
+					const value = headerValue(m, name);
+					return value === undefined ? undefined : decodeEncodedWords(value);
+				};
+
+				// The readable text is one unit in two renderings. Replacing only one
+				// of them would leave the other saying what the draft used to say, and
+				// which one a recipient reads depends on their mail client.
+				if (htmlBody !== undefined && body === undefined) {
+					throw new Error("htmlBody replaces the readable text and needs body beside it");
+				}
+				const text =
+					body !== undefined
+						? { body, htmlBody }
+						: {
+								body: await this.messageBody(m),
+								htmlBody: extractHtmlBody(m.payload) || undefined,
+							};
+
+				const files = await this.keptFiles(m, attachments);
+				const images = await this.keptImages(m, inlineImages, text.htmlBody);
+
+				// The rebuilt message replaces the old one wholesale, so the threading
+				// state has to travel too or a reply draft comes out of the update as
+				// a fresh conversation.
+				const inReplyTo = normalizeMessageId(headerValue(m, "In-Reply-To") ?? "") ?? undefined;
+				const references = sanitizeReferences(headerValue(m, "References"));
+
 				const raw = b64urlEncode(
-					buildRfc822({ to, cc, bcc, from, subject, body, htmlBody, attachments, inlineImages }),
+					buildRfc822({
+						to: to ?? existing("To") ?? "",
+						cc: cc ?? existing("Cc"),
+						bcc: bcc ?? existing("Bcc"),
+						from: from ?? existing("From"),
+						subject: subject ?? existing("Subject") ?? "",
+						body: text.body,
+						htmlBody: text.htmlBody,
+						attachments: files,
+						inlineImages: images,
+						inReplyTo,
+						references,
+					}),
 				);
 				const d = await this.api<DraftResult>(`/drafts/${encodeURIComponent(draftId)}`, {
 					method: "PUT",
-					body: JSON.stringify({ message: { raw } }),
+					body: JSON.stringify({
+						message: { raw, ...(m.threadId ? { threadId: m.threadId } : {}) },
+					}),
 				});
-				return this.text({ draftId: d.id, messageId: d.message?.id });
+				return this.text({
+					draftId: d.id,
+					messageId: d.message?.id,
+					threadId: d.message?.threadId,
+					attachments: files.map((f) => f.filename),
+				});
 			},
 		);
 
