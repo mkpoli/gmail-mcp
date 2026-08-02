@@ -4,8 +4,8 @@
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
-[![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#-できること)
-[![tests](https://img.shields.io/badge/tests-233_passing-success?logo=bun&logoColor=white)](#-テスト)
+[![27 tools](https://img.shields.io/badge/tools-27-0b7285)](#-できること)
+[![tests](https://img.shields.io/badge/tests-250_passing-success?logo=bun&logoColor=white)](#-テスト)
 
 *[English README](./README.md) · [简体中文](./README.zh.md)*
 
@@ -132,7 +132,10 @@ Claude Codeでは`/mcp`を実行し、接続ごとに対応するGoogleアカウ
 `update_draft`<br>
 `send_draft`<br>
 `delete_draft`<br>
-`list_drafts`
+`list_drafts`<br>
+`stage_attachment_begin`<br>
+`stage_attachment_append`<br>
+`stage_attachment_finish`
 
 </td>
 <td>
@@ -154,6 +157,8 @@ Claude Codeでは`/mcp`を実行し、接続ごとに対応するGoogleアカウ
 送信するメールの構造は、通常のメールクライアントが組み立てるものと同じです。プレーンテキストにHTML版を添え、ファイルを添付し、`cid:`で参照するインライン画像を埋め込みます。入れ子は`multipart/mixed › multipart/related › multipart/alternative`になります。件名と表示名はRFC 2047、ファイル名はRFC 2231で符号化するので、日本語、中国語、絵文字も文字化けせずに送受信できます。
 
 `reply_all`は元メールの`Reply-To`・`From`・`To`・`Cc`を読み、自分のアドレスと差出人として使えるアドレスを除いて宛先を組み立て、相手が書いてきたアドレスから返信し、`References`の連鎖を引き継ぎ、送信する形式に合わせて原文を引用します。`forward_message`では元メールのヘッダを再現し、添付ファイルを引き継いで転送できます。
+
+`create_draft`に`replyToMessageId`を渡すと、返信を下書きとして作れます。下書きは元メールのスレッドに入り、`In-Reply-To`と`References`を持ち、宛先はreply-all相当、件名は`Re:`付きになり、原文を引用します。`update_draft`が書き換えるのは渡したフィールドだけです。宛先も本文も、他のクライアントで手動追加した添付ファイルも、返信先のスレッドも、渡さなかったものは下書きから読み戻して保持します。ツール引数に収まらない大きなファイルは`stage_attachment_begin`でステージングを開き、返されたURLへ`curl -T`で生のバイト列をアップロードするか、`stage_attachment_append`でbase64を分割して送ります。各ツールの`attachments`はその`stagingId`を受け付けます。
 
 読み取りにも上限があります。本文とスレッドには文字数、応答全体にはバイト数の上限があり、添付ファイルをそのまま返すのは小さいものに限ります。長いメーリングリストのスレッドや大きなファイルは、切り詰めたうえでその旨を添えて返すので、アシスタントのコンテキストを圧迫することはありません。
 
@@ -268,7 +273,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 
 ## ✅ テスト
 
-233件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定、サインイン時のCSRFとstateの照合に加えて、Gmailの代役を立ててツール自体の動作も確かめています。セッションの所有者判定、宛先の組み立て、添付ファイルの選択、一部が失敗した読み取りの返し方まで含みます。
+250件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定、サインイン時のCSRFとstateの照合に加えて、Gmailの代役を立ててツール自体の動作も確かめています。セッションの所有者判定、宛先の組み立て、添付ファイルの選択、一部が失敗した読み取りの返し方まで含みます。
 
 実際のGmailアカウントの間でも、すべてのツールの動作を確認しました。
 
@@ -288,7 +293,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 ```sh
 bun run dev     # wrangler dev、:8788
 bun run check   # biome + tsc
-bun test        # 単体テスト233件
+bun test        # 単体テスト250件
 bun run assets  # ライト・ダークの図を再生成
 bun run deploy
 ```

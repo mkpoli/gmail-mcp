@@ -154,16 +154,18 @@
     },
     {
       "name": "create_draft",
-      "description": "Create a draft in the connected account without sending",
+      "description": "Create a draft in the connected account without sending. With replyToMessageId the draft joins that message's thread, carries its threading headers, and derives recipients and subject from a reply-all when they are not given",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
           "to": {
-            "type": "string"
+            "type": "string",
+            "description": "Required unless replyToMessageId derives it"
           },
           "subject": {
-            "type": "string"
+            "type": "string",
+            "description": "Required unless replyToMessageId derives it"
           },
           "body": {
             "type": "string",
@@ -190,21 +192,22 @@
               "type": "object",
               "properties": {
                 "filename": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged file brings its own"
                 },
                 "contentType": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged file brings its own"
                 },
                 "content": {
                   "type": "string",
-                  "description": "File data as standard base64"
+                  "description": "File data as standard base64, for files small enough to pass inline"
+                },
+                "stagingId": {
+                  "type": "string",
+                  "description": "A staged file from the stage_attachment tools, instead of content"
                 }
-              },
-              "required": [
-                "filename",
-                "contentType",
-                "content"
-              ]
+              }
             }
           },
           "inlineImages": {
@@ -218,31 +221,41 @@
                   "description": "Content-ID referenced from the HTML as <img src=\"cid:...\">"
                 },
                 "contentType": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged image brings its own"
                 },
                 "content": {
                   "type": "string",
                   "description": "Image data as standard base64"
+                },
+                "stagingId": {
+                  "type": "string",
+                  "description": "A staged image from the stage_attachment tools, instead of content"
                 }
               },
               "required": [
-                "cid",
-                "contentType",
-                "content"
+                "cid"
               ]
             }
+          },
+          "replyToMessageId": {
+            "type": "string",
+            "description": "Gmail message id of the message this draft answers"
+          },
+          "quote": {
+            "default": true,
+            "type": "boolean",
+            "description": "When replying, quote the original under the body"
           }
         },
         "required": [
-          "to",
-          "subject",
           "body"
         ]
       }
     },
     {
       "name": "update_draft",
-      "description": "Replace the content of a draft in the connected account",
+      "description": "Change parts of a draft in the connected account. Whatever is not passed keeps its current value — recipients, subject, text, files added in any client, and the thread the draft answers all survive the rebuild",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -258,11 +271,11 @@
           },
           "body": {
             "type": "string",
-            "description": "Plain-text body"
+            "description": "Plain-text body; passing it replaces the readable text as a whole"
           },
           "htmlBody": {
-            "description": "HTML alternative shown by rich clients",
-            "type": "string"
+            "type": "string",
+            "description": "HTML alternative shown by rich clients; needs body beside it"
           },
           "cc": {
             "type": "string"
@@ -275,31 +288,31 @@
             "type": "string"
           },
           "attachments": {
-            "default": [],
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "filename": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged file brings its own"
                 },
                 "contentType": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged file brings its own"
                 },
                 "content": {
                   "type": "string",
-                  "description": "File data as standard base64"
+                  "description": "File data as standard base64, for files small enough to pass inline"
+                },
+                "stagingId": {
+                  "type": "string",
+                  "description": "A staged file from the stage_attachment tools, instead of content"
                 }
-              },
-              "required": [
-                "filename",
-                "contentType",
-                "content"
-              ]
-            }
+              }
+            },
+            "description": "Omit to keep the draft's files; [] removes them"
           },
           "inlineImages": {
-            "default": [],
             "type": "array",
             "items": {
               "type": "object",
@@ -309,26 +322,27 @@
                   "description": "Content-ID referenced from the HTML as <img src=\"cid:...\">"
                 },
                 "contentType": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged image brings its own"
                 },
                 "content": {
                   "type": "string",
                   "description": "Image data as standard base64"
+                },
+                "stagingId": {
+                  "type": "string",
+                  "description": "A staged image from the stage_attachment tools, instead of content"
                 }
               },
               "required": [
-                "cid",
-                "contentType",
-                "content"
+                "cid"
               ]
-            }
+            },
+            "description": "Omit to keep the images the draft's HTML shows; [] removes them"
           }
         },
         "required": [
-          "draftId",
-          "to",
-          "subject",
-          "body"
+          "draftId"
         ]
       }
     },
@@ -385,6 +399,64 @@
       }
     },
     {
+      "name": "stage_attachment_begin",
+      "description": "Stage a file for the connected account outside tool arguments, for attachments whose base64 is too large to pass inline. Then either PUT the raw file bytes to the returned uploadUrl (curl -T <file> '<uploadUrl>'), which finishes the staging by itself, or send base64 with stage_attachment_append and seal it with stage_attachment_finish. Any attachments or inlineImages field then accepts {\"stagingId\": ...}",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "description": "Media type, e.g. application/pdf"
+          }
+        },
+        "required": [
+          "filename",
+          "contentType"
+        ]
+      }
+    },
+    {
+      "name": "stage_attachment_append",
+      "description": "Add base64 to a staged attachment in the connected account, in order, up to 1000000 characters per call",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "stagingId": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "description": "Standard base64; every chunk before the last must carry no padding"
+          }
+        },
+        "required": [
+          "stagingId",
+          "content"
+        ]
+      }
+    },
+    {
+      "name": "stage_attachment_finish",
+      "description": "Seal a staged attachment in the connected account so messages and drafts can attach it by stagingId",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "stagingId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stagingId"
+        ]
+      }
+    },
+    {
       "name": "send_message",
       "description": "Send mail as the connected account. For replies pass threadId plus the original's Message-ID header, or its Gmail message id, as inReplyTo",
       "inputSchema": {
@@ -422,21 +494,22 @@
               "type": "object",
               "properties": {
                 "filename": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged file brings its own"
                 },
                 "contentType": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged file brings its own"
                 },
                 "content": {
                   "type": "string",
-                  "description": "File data as standard base64"
+                  "description": "File data as standard base64, for files small enough to pass inline"
+                },
+                "stagingId": {
+                  "type": "string",
+                  "description": "A staged file from the stage_attachment tools, instead of content"
                 }
-              },
-              "required": [
-                "filename",
-                "contentType",
-                "content"
-              ]
+              }
             }
           },
           "inlineImages": {
@@ -450,17 +523,20 @@
                   "description": "Content-ID referenced from the HTML as <img src=\"cid:...\">"
                 },
                 "contentType": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged image brings its own"
                 },
                 "content": {
                   "type": "string",
                   "description": "Image data as standard base64"
+                },
+                "stagingId": {
+                  "type": "string",
+                  "description": "A staged image from the stage_attachment tools, instead of content"
                 }
               },
               "required": [
-                "cid",
-                "contentType",
-                "content"
+                "cid"
               ]
             }
           },
@@ -505,21 +581,22 @@
               "type": "object",
               "properties": {
                 "filename": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged file brings its own"
                 },
                 "contentType": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged file brings its own"
                 },
                 "content": {
                   "type": "string",
-                  "description": "File data as standard base64"
+                  "description": "File data as standard base64, for files small enough to pass inline"
+                },
+                "stagingId": {
+                  "type": "string",
+                  "description": "A staged file from the stage_attachment tools, instead of content"
                 }
-              },
-              "required": [
-                "filename",
-                "contentType",
-                "content"
-              ]
+              }
             }
           },
           "inlineImages": {
@@ -533,17 +610,20 @@
                   "description": "Content-ID referenced from the HTML as <img src=\"cid:...\">"
                 },
                 "contentType": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Required with content; a staged image brings its own"
                 },
                 "content": {
                   "type": "string",
                   "description": "Image data as standard base64"
+                },
+                "stagingId": {
+                  "type": "string",
+                  "description": "A staged image from the stage_attachment tools, instead of content"
                 }
               },
               "required": [
-                "cid",
-                "contentType",
-                "content"
+                "cid"
               ]
             }
           }

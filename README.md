@@ -12,8 +12,8 @@
 [![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
-[![24 tools](https://img.shields.io/badge/tools-24-0b7285)](#what-it-can-do)
-[![tests](https://img.shields.io/badge/tests-233_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
+[![27 tools](https://img.shields.io/badge/tools-27-0b7285)](#what-it-can-do)
+[![tests](https://img.shields.io/badge/tests-250_passing-success?logo=bun&logoColor=white)](#how-it-was-tested)
 
 *[日本語版](./README.ja.md) · [简体中文](./README.zh.md)*
 
@@ -144,7 +144,10 @@ Your deployment serves this guide at `https://<your-host>/`.
 `update_draft`<br>
 `send_draft`<br>
 `delete_draft`<br>
-`list_drafts`
+`list_drafts`<br>
+`stage_attachment_begin`<br>
+`stage_attachment_append`<br>
+`stage_attachment_finish`
 
 </td>
 <td>
@@ -166,6 +169,8 @@ Your deployment serves this guide at `https://<your-host>/`.
 Messages leave the way a mail client sends them: plain text with an HTML alternative, file attachments, and inline images referenced by `cid:`, nested as `multipart/mixed › multipart/related › multipart/alternative`. Subjects and display names use RFC 2047, filenames use RFC 2231, so Japanese, Chinese, and emoji survive the trip.
 
 `reply_all` reads the original's `Reply-To`, `From`, `To`, and `Cc`, drops your own address and any address you send mail as, answers from the one the sender wrote to, carries the `References` chain, and quotes the original in whichever parts you send. `forward_message` reproduces the forwarded envelope and can re-attach the original's files.
+
+`create_draft` with `replyToMessageId` writes the reply as a draft to edit before sending: it joins the original's thread, carries `In-Reply-To` and `References`, derives the reply-all recipients and the `Re:` subject, and quotes the original. `update_draft` changes only the fields it is given; recipients, text, files added by hand in any client, and the thread the draft answers are read back and kept. A file whose base64 will not fit through tool arguments is staged instead: `stage_attachment_begin` returns an upload URL that takes the raw bytes in one `curl -T`, `stage_attachment_append` takes base64 in chunks, and every `attachments` field accepts the resulting `stagingId`.
 
 Reading is bounded on purpose: message and thread bodies have character budgets, a whole response has a byte ceiling, and an attachment is returned inline only while it stays small enough to read. A long mailing-list thread, or a large file, comes back trimmed with a note saying so rather than filling the assistant's context.
 
@@ -284,7 +289,7 @@ The Worker decrypts mail in memory while serving a request, as any hosted relay 
 
 ## How it was tested
 
-233 unit tests cover message construction (MIME nesting, RFC 2047 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, the CSRF and state-binding checks that guard the browser side of sign-in, and the tools themselves against a stand-in Gmail — session ownership, recipient composition, attachment selection, and what a partly-failed read returns.
+250 unit tests cover message construction (MIME nesting, RFC 2047 folding, RFC 2231 filenames, CR/LF rejection, base64 wrapping), body extraction across charsets, reply and forward composition, the Google token flows, the sign-in allowlist, the CSRF and state-binding checks that guard the browser side of sign-in, and the tools themselves against a stand-in Gmail — session ownership, recipient composition, attachment selection, and what a partly-failed read returns.
 
 Beyond that, every tool has run against real Gmail accounts, with a separate account checking what arrived:
 
@@ -304,7 +309,7 @@ Beyond that, every tool has run against real Gmail accounts, with a separate acc
 ```sh
 bun run dev     # wrangler dev on :8788
 bun run check   # biome + tsc
-bun test        # 233 unit tests
+bun test        # 250 unit tests
 bun run assets  # regenerate the light and dark diagrams
 bun run deploy
 ```
