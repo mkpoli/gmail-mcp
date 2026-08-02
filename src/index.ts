@@ -1881,8 +1881,15 @@ async function uploadRoute(request: Request, env: Env, path: string): Promise<Re
 			return new Response("Too many uploads", { status: 429 });
 		}
 	}
-	const session = await getAgentByName<Env, GmailMCP>(env.MCP_OBJECT, name);
-	return session.fetch(request);
+	// A name that never belonged to a session wakes an object with no grant,
+	// which refuses to start at all; from out here that is the same wrong
+	// address as a bad secret, and it gets the same answer.
+	try {
+		const session = await getAgentByName<Env, GmailMCP>(env.MCP_OBJECT, name);
+		return await session.fetch(request);
+	} catch {
+		return new Response("no staging answers to this address", { status: 404 });
+	}
 }
 
 export default {
