@@ -332,6 +332,98 @@ describe("reply_all from a send-as alias", () => {
 	});
 });
 
+/** The MIME a call handed to Gmail, decoded from its base64url raw. */
+function sentMime(urlPart: string): string {
+	const sent = requests.find((r) => r.url.includes(urlPart));
+	const body = sent?.body as { raw?: string; message?: { raw?: string } } | undefined;
+	const encoded = String(body?.raw ?? body?.message?.raw ?? "");
+	return new TextDecoder().decode(
+		Uint8Array.from(atob(encoded.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)),
+	);
+}
+
+/** The readable text inside a MIME body, decoded from its base64 lines. */
+function mimeText(mime: string): string {
+	const body = mime.split("\r\n\r\n").slice(1).join("\r\n\r\n");
+	return new TextDecoder().decode(
+		Uint8Array.from(atob(body.replace(/[^A-Za-z0-9+/=]/g, "")), (c) => c.charCodeAt(0)),
+	);
+}
+
+describe("create_draft as a reply", () => {
+	const serve = () =>
+		serveGmail([
+			[/\/settings\/sendAs/, () => ({ sendAs: [{ sendAsEmail: "me@example.com" }] })],
+			[/\/messages\/m1\?format=full/, () => message("m1")],
+			[/\/drafts$/, () => ({ id: "d1", message: { id: "dm1", threadId: "t-m1" } })],
+		]);
+
+	test("joins the thread with the headers other clients need", async () => {
+		const { handlers } = await boot();
+		serve();
+		const out = result(
+			await tool(handlers, "create_draft")({ body: "my answer", replyToMessageId: "m1" }),
+		);
+		expect(out.draftId).toBe("d1");
+		expect(out.threadId).toBe("t-m1");
+
+		const created = requests.find((r) => r.url.endsWith("/drafts"));
+		const posted = (created?.body ?? {}) as { message?: { threadId?: string } };
+		expect(posted.message?.threadId).toBe("t-m1");
+		const mime = sentMime("/drafts");
+		expect(mime).toContain("In-Reply-To: <orig@mail.example.com>");
+		expect(mime).toContain("References: <orig@mail.example.com>");
+		expect(mime).toContain("Subject: Re: Quarterly report");
+		expect(mime).toContain("To: alice@example.com");
+		expect(mime).toContain("Cc: bob@example.com, carol@example.com");
+	});
+
+	test("quotes the original under the body", async () => {
+		const { handlers } = await boot();
+		serve();
+		await tool(
+			handlers,
+			"create_draft",
+		)({ body: "my answer", replyToMessageId: "m1", quote: true });
+		const text = mimeText(sentMime("/drafts"));
+		expect(text).toContain("my answer");
+		expect(text).toContain("> the original body");
+		expect(text).toContain("wrote:");
+	});
+
+	test("leaves the original out when asked not to quote", async () => {
+		const { handlers } = await boot();
+		serve();
+		await tool(
+			handlers,
+			"create_draft",
+		)({ body: "my answer", replyToMessageId: "m1", quote: false });
+		const text = mimeText(sentMime("/drafts"));
+		expect(text).toContain("my answer");
+		expect(text).not.toContain("> the original body");
+	});
+
+	// A caller that names its own recipients owns all of them; deriving a Cc
+	// beside a written To would copy people the caller chose to leave out.
+	test("a written To replaces the derived recipients whole", async () => {
+		const { handlers } = await boot();
+		serve();
+		await tool(
+			handlers,
+			"create_draft",
+		)({ body: "b", replyToMessageId: "m1", to: "only@example.com" });
+		const mime = sentMime("/drafts");
+		expect(mime).toContain("To: only@example.com");
+		expect(mime).not.toContain("Cc:");
+	});
+
+	test("a fresh draft still needs its recipients spelled out", async () => {
+		const { handlers } = await boot();
+		serveGmail([]);
+		await expect(tool(handlers, "create_draft")({ body: "b" })).rejects.toThrow(/replyToMessageId/);
+	});
+});
+
 describe("get_attachment", () => {
 	const withAttachment: ReturnType<typeof message> & {
 		payload: { parts?: Record<string, unknown>[] };

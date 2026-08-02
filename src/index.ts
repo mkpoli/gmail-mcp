@@ -12,6 +12,7 @@ import {
 	decodeEncodedWords,
 	encodedSize,
 	extractBody,
+	type FilePart,
 	forwardHeaderBlock,
 	forwardHtmlBlock,
 	forwardSubject,
@@ -20,6 +21,7 @@ import {
 	type GmailPart,
 	gmailFetch,
 	headerValue,
+	type InlineImage,
 	MAX_ENCODED_ATTACHMENT_BYTES,
 	normalizeMessageId,
 	parseAddresses,
@@ -358,6 +360,148 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		};
 	}
 
+	// Everything a reply is built from, derived once from the message being
+	// answered: who it goes to and from, the subject, the threading headers, and
+	// the original's text as quotable blocks. reply_all sends it at once; a reply
+	// draft holds it for editing. Both derive it here, or a draft later sent
+	// would thread differently from a reply sent directly.
+	private async replyContext(messageId: string): Promise<{
+		original: GmailMessage;
+		to: string[];
+		cc: string[];
+		from: string | undefined;
+		subject: string;
+		inReplyTo: string | undefined;
+		references: string | undefined;
+		quotedPlain: string;
+		quotedHtml: string;
+	}> {
+		const account = (await this.ownerProps()).email;
+		const original = await this.api<GmailMessage>(
+			`/messages/${encodeURIComponent(messageId)}?format=full`,
+		);
+		// Mail to a send-as alias is mail to this account. Without them the
+		// alias looks like a stranger: the reply copies it back to the
+		// sender and goes out from the primary address, naming an identity
+		// the correspondent was never given.
+		const self = [account.toLowerCase(), ...(await this.sendAsAddresses())];
+		const fromAddrs = parseAddresses(headerValue(original, "From"));
+		const toAddrs = parseAddresses(headerValue(original, "To"));
+		const ccAddrs = parseAddresses(headerValue(original, "Cc"));
+		const replyToHeader = parseAddresses(headerValue(original, "Reply-To"));
+
+		const { to, cc } = replyRecipients({
+			self,
+			from: fromAddrs,
+			to: toAddrs,
+			cc: ccAddrs,
+			replyTo: replyToHeader,
+		});
+
+		// Answer from the identity the correspondent wrote to. Gmail sends
+		// as the primary address when none is given, which would hand them
+		// an address they were never given.
+		const written = new Set([...toAddrs, ...ccAddrs].map(canonicalAddress));
+		const spokenTo = self.find((identity) => written.has(canonicalAddress(identity)));
+		const from =
+			spokenTo && canonicalAddress(spokenTo) !== canonicalAddress(account) ? spokenTo : undefined;
+
+		// A sender that omitted the angle brackets would otherwise have its
+		// malformed id copied into the reply, where no receiver can thread
+		// on it. Nothing usable means no threading header at all; the
+		// thread id still carries the reply into the conversation.
+		const originalMessageId = headerValue(original, "Message-ID");
+		const messageIdHeader = originalMessageId ? normalizeMessageId(originalMessageId) : null;
+		// The chain arrives from the sender too, and an id that fails the
+		// same check threads nothing on the receiving end, so carrying it
+		// would only cost the reply.
+		const references = [
+			...(headerValue(original, "References") ?? "").split(/\s+/).map(normalizeMessageId),
+			messageIdHeader,
+		]
+			.filter(Boolean)
+			.join(" ");
+		const fromDisplay = decodeEncodedWords(headerValue(original, "From") ?? "unknown sender");
+		const date = headerValue(original, "Date") ?? "an earlier date";
+		const quoted = truncate(await this.messageBody(original), THREAD_BODY_LIMIT);
+
+		return {
+			original,
+			to,
+			cc,
+			from,
+			subject: replySubject(decodeEncodedWords(headerValue(original, "Subject") ?? "")),
+			inReplyTo: messageIdHeader ?? undefined,
+			references: references || undefined,
+			quotedPlain: quotePlain(fromDisplay, date, quoted),
+			quotedHtml: quoteHtml(fromDisplay, date, quoted),
+		};
+	}
+
+	// A reply as a draft: the same derivation reply_all sends, held for editing.
+	private async createReplyDraft({
+		replyToMessageId,
+		quote,
+		to,
+		subject,
+		body,
+		htmlBody,
+		cc,
+		bcc,
+		from,
+		attachments,
+		inlineImages,
+	}: {
+		replyToMessageId: string;
+		quote: boolean;
+		to?: string | undefined;
+		subject?: string | undefined;
+		body: string;
+		htmlBody?: string | undefined;
+		cc?: string | undefined;
+		bcc?: string | undefined;
+		from?: string | undefined;
+		attachments: FilePart[];
+		inlineImages: InlineImage[];
+	}) {
+		const reply = await this.replyContext(replyToMessageId);
+		// A caller that names its own recipients owns all of them: mixing a
+		// written To with a derived Cc would copy people the caller chose to
+		// leave out.
+		const derived = to === undefined;
+		const finalTo = derived ? reply.to.join(", ") : to;
+		if (!finalTo.trim() && !cc?.trim() && !bcc?.trim()) {
+			throw new Error("this reply has no recipient other than this account; pass to explicitly");
+		}
+		const raw = b64urlEncode(
+			buildRfc822({
+				to: finalTo,
+				cc: derived ? (reply.cc.length > 0 ? reply.cc.join(", ") : undefined) : cc,
+				bcc,
+				from: from ?? reply.from,
+				subject: subject ?? reply.subject,
+				body: quote ? `${body}\n\n${reply.quotedPlain}` : body,
+				htmlBody: htmlBody && quote ? `${htmlBody}\n<br>\n${reply.quotedHtml}` : htmlBody,
+				attachments,
+				inlineImages,
+				inReplyTo: reply.inReplyTo,
+				references: reply.references,
+			}),
+		);
+		// Gmail threads a draft on the thread id it is created with; the
+		// headers alone are for every other mail client reading the thread.
+		const d = await this.api<DraftResult>("/drafts", {
+			method: "POST",
+			body: JSON.stringify({ message: { raw, threadId: reply.original.threadId } }),
+		});
+		return this.text({
+			draftId: d.id,
+			messageId: d.message?.id,
+			threadId: d.message?.threadId,
+			to: finalTo,
+		});
+	}
+
 	async init() {
 		// Starting is what binds props for the life of the object, so a grant
 		// that does not own this session must not be the one to do it. Refusing
@@ -540,12 +684,30 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 		this.server.tool(
 			"create_draft",
-			`Create a draft in ${account} without sending`,
-			draftFields,
-			async ({ to, subject, body, htmlBody, cc, bcc, from, attachments, inlineImages }) => {
-				const raw = b64urlEncode(
-					buildRfc822({ to, cc, bcc, from, subject, body, htmlBody, attachments, inlineImages }),
-				);
+			`Create a draft in ${account} without sending. With replyToMessageId the draft joins that message's thread, carries its threading headers, and derives recipients and subject from a reply-all when they are not given`,
+			{
+				...draftFields,
+				to: z.string().optional().describe("Required unless replyToMessageId derives it"),
+				subject: z.string().optional().describe("Required unless replyToMessageId derives it"),
+				replyToMessageId: z
+					.string()
+					.optional()
+					.describe("Gmail message id of the message this draft answers"),
+				quote: z
+					.boolean()
+					.default(true)
+					.describe("When replying, quote the original under the body"),
+			},
+			async ({ replyToMessageId, quote, to, subject, body, ...rest }) => {
+				if (replyToMessageId) {
+					return this.createReplyDraft({ replyToMessageId, quote, to, subject, body, ...rest });
+				}
+				if (to === undefined || subject === undefined) {
+					throw new Error(
+						"a fresh draft needs to and subject; a reply derives them from replyToMessageId",
+					);
+				}
+				const raw = b64urlEncode(buildRfc822({ to, subject, body, ...rest }));
 				const d = await this.api<DraftResult>("/drafts", {
 					method: "POST",
 					body: JSON.stringify({ message: { raw } }),
@@ -706,81 +868,29 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				inlineImages: z.array(inlineImageSchema).default([]),
 			},
 			async ({ messageId, body, htmlBody, attachments, inlineImages }) => {
-				const original = await this.api<GmailMessage>(
-					`/messages/${encodeURIComponent(messageId)}?format=full`,
-				);
-				// Mail to a send-as alias is mail to this account. Without them the
-				// alias looks like a stranger: the reply copies it back to the
-				// sender and goes out from the primary address, naming an identity
-				// the correspondent was never given.
-				const self = [account.toLowerCase(), ...(await this.sendAsAddresses())];
-				const fromAddrs = parseAddresses(headerValue(original, "From"));
-				const toAddrs = parseAddresses(headerValue(original, "To"));
-				const ccAddrs = parseAddresses(headerValue(original, "Cc"));
-				const replyToHeader = parseAddresses(headerValue(original, "Reply-To"));
-
-				const { to, cc: rest } = replyRecipients({
-					self,
-					from: fromAddrs,
-					to: toAddrs,
-					cc: ccAddrs,
-					replyTo: replyToHeader,
-				});
-				if (to.length === 0) {
+				const reply = await this.replyContext(messageId);
+				if (reply.to.length === 0) {
 					throw new Error("reply_all found no recipient other than this account");
 				}
-
-				// Answer from the identity the correspondent wrote to. Gmail sends
-				// as the primary address when none is given, which would hand them
-				// an address they were never given.
-				const written = new Set([...toAddrs, ...ccAddrs].map(canonicalAddress));
-				const spokenTo = self.find((identity) => written.has(canonicalAddress(identity)));
-				const from =
-					spokenTo && canonicalAddress(spokenTo) !== canonicalAddress(account)
-						? spokenTo
-						: undefined;
-
-				// A sender that omitted the angle brackets would otherwise have its
-				// malformed id copied into the reply, where no receiver can thread
-				// on it. Nothing usable means no threading header at all; the
-				// thread id still carries the reply into the conversation.
-				const originalMessageId = headerValue(original, "Message-ID");
-				const messageIdHeader = originalMessageId ? normalizeMessageId(originalMessageId) : null;
-				// The chain arrives from the sender too, and an id that fails the
-				// same check threads nothing on the receiving end, so carrying it
-				// would only cost the reply.
-				const references = [
-					...(headerValue(original, "References") ?? "").split(/\s+/).map(normalizeMessageId),
-					messageIdHeader,
-				]
-					.filter(Boolean)
-					.join(" ");
-				const fromDisplay = decodeEncodedWords(headerValue(original, "From") ?? "unknown sender");
-				const date = headerValue(original, "Date") ?? "an earlier date";
-				const originalBody = await this.messageBody(original);
-				const quoted = truncate(originalBody, THREAD_BODY_LIMIT);
-
 				const raw = b64urlEncode(
 					buildRfc822({
-						to: to.join(", "),
-						cc: rest.length > 0 ? rest.join(", ") : undefined,
-						from,
-						subject: replySubject(decodeEncodedWords(headerValue(original, "Subject") ?? "")),
-						body: `${body}\n\n${quotePlain(fromDisplay, date, quoted)}`,
-						htmlBody: htmlBody
-							? `${htmlBody}\n<br>\n${quoteHtml(fromDisplay, date, quoted)}`
-							: undefined,
+						to: reply.to.join(", "),
+						cc: reply.cc.length > 0 ? reply.cc.join(", ") : undefined,
+						from: reply.from,
+						subject: reply.subject,
+						body: `${body}\n\n${reply.quotedPlain}`,
+						htmlBody: htmlBody ? `${htmlBody}\n<br>\n${reply.quotedHtml}` : undefined,
 						attachments,
 						inlineImages,
-						inReplyTo: messageIdHeader ?? undefined,
-						references: references || undefined,
+						inReplyTo: reply.inReplyTo,
+						references: reply.references,
 					}),
 				);
 				const m = await this.api("/messages/send", {
 					method: "POST",
-					body: JSON.stringify({ raw, threadId: original.threadId }),
+					body: JSON.stringify({ raw, threadId: reply.original.threadId }),
 				});
-				return this.text({ id: m.id, threadId: m.threadId, to, cc: rest });
+				return this.text({ id: m.id, threadId: m.threadId, to: reply.to, cc: reply.cc });
 			},
 		);
 
