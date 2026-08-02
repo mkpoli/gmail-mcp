@@ -1,6 +1,6 @@
 {
 	"name": "gmail-mcp",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"private": true,
 	"type": "module",
 	"description": "Multi-account Gmail on a Cloudflare Worker you deploy yourself: search and read mail, send, reply-all with quoted history, forward, attachments, drafts, labels, and threads, over MCP",
