@@ -109,6 +109,11 @@ app.get("/authorize", async (c) => {
 		server: {
 			description:
 				"Remote MCP server for Gmail. Signing in grants the connecting MCP client access to the chosen Google account's mailbox.",
+			// Google's screen lists each permission with its own tick box, and an
+			// unticked Gmail line only comes to light after the redirect back.
+			// Saying so now is the one chance to prevent that round trip.
+			consentNote:
+				"Google will ask which permissions to share. Leave every box ticked — without the Gmail one this connection cannot reach any mail.",
 			name: "Gmail MCP",
 		},
 		setCookie,
@@ -185,6 +190,65 @@ app.post("/authorize", async (c) => {
 	}
 });
 
+// A sign-in that came back missing something ends on this page rather than on
+// a bare error line. The state that brought the browser here was spent on
+// arrival, so the button carries a fresh one, bound to this session the same
+// way the first was — Google's screen reopens directly, with nothing to
+// restart on the client side.
+async function consentRetry(
+	request: Request,
+	kv: KVNamespace,
+	oauthReqInfo: AuthRequest,
+	status: number,
+	problem: string,
+	fix: string,
+): Promise<Response> {
+	const { stateToken } = await createOAuthState(oauthReqInfo, kv);
+	const { setCookie } = await bindStateToSession(stateToken);
+	const retryUrl = getGoogleAuthorizeUrl({
+		client_id: env.GOOGLE_CLIENT_ID,
+		redirect_uri: new URL("/callback", request.url).href,
+		scope: GOOGLE_SCOPE,
+		state: stateToken,
+	}).replace(/&/g, "&amp;");
+	const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gmail MCP | Sign-in incomplete</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         line-height: 1.6; color: #333; background: #f9fafb; margin: 0; }
+  .card { max-width: 560px; margin: 3rem auto; background: #fff; border-radius: 8px;
+          box-shadow: 0 8px 36px 8px rgba(0, 0, 0, 0.1); padding: 2rem; }
+  h1 { font-size: 1.3rem; font-weight: 500; margin-top: 0; }
+  .fix { background: #fff8e1; border: 1px solid #f0dfa0; border-radius: 6px;
+         padding: 0.75rem 1rem; color: #6b5900; }
+  .button { display: inline-block; margin-top: 1.5rem; padding: 0.75rem 1.5rem; border-radius: 6px;
+            background: #0070f3; color: #fff; text-decoration: none; font-weight: 500; }
+  a { color: #0070f3; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Sign-in incomplete</h1>
+  <p>${problem}</p>
+  <p class="fix">${fix}</p>
+  <a class="button" href="${retryUrl}">Choose permissions again</a>
+</div>
+</body>
+</html>`;
+	return new Response(html, {
+		status,
+		headers: {
+			"Content-Type": "text/html; charset=utf-8",
+			"Cache-Control": "no-store",
+			"Set-Cookie": setCookie,
+		},
+	});
+}
+
 function redirectToGoogle(request: Request, stateToken: string, headers?: Headers) {
 	const h = new Headers(headers);
 	h.set(
@@ -230,9 +294,13 @@ app.get("/callback", async (c) => {
 	// tool call instead, so it is refused now while the reason is still legible.
 	const granted = (tokens.scope ?? "").split(/\s+/).filter(Boolean);
 	if (granted.length > 0 && !granted.includes(GMAIL_SCOPE)) {
-		return c.text(
-			"Gmail access was not granted. Sign in again and leave the Gmail permission ticked.",
+		return consentRetry(
+			c.req.raw,
+			c.env.OAUTH_KV,
+			oauthReqInfo,
 			403,
+			"The Gmail permission was left unticked on Google's screen, so this connection could reach no mail. Nothing was stored.",
+			"On the list of permissions, leave every box ticked — the Gmail one is the connection's whole purpose. It sits below the account picker and above the Continue button.",
 		);
 	}
 	// The address is what the allowlist, the account cap, the session owner and
@@ -240,15 +308,23 @@ app.get("/callback", async (c) => {
 	// finish. Saying so here beats the lookup failing a moment later with
 	// nothing the person signing in can act on.
 	if (granted.length > 0 && !granted.includes(EMAIL_SCOPE)) {
-		return c.text(
-			"Your email address was not shared. Sign in again and leave the email permission ticked.",
+		return consentRetry(
+			c.req.raw,
+			c.env.OAUTH_KV,
+			oauthReqInfo,
 			403,
+			"The email permission was withheld, and the address is what a connection is keyed by. Nothing was stored.",
+			"On the list of permissions, leave every box ticked, the email address included.",
 		);
 	}
 	if (!tokens.refresh_token) {
-		return c.text(
-			"Google did not return a refresh token. Remove this app's access at https://myaccount.google.com/connections and try again.",
+		return consentRetry(
+			c.req.raw,
+			c.env.OAUTH_KV,
+			oauthReqInfo,
 			400,
+			"Google sent no refresh token, which is what keeps a connection signed in past the first hour.",
+			'Remove this app\'s earlier access at <a href="https://myaccount.google.com/connections">myaccount.google.com/connections</a>, then choose the account again.',
 		);
 	}
 

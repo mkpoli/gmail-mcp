@@ -466,6 +466,11 @@ export interface ApprovalDialogOptions {
 		name: string;
 		logo?: string;
 		description?: string;
+		/**
+		 * Advice about the identity provider's own screen that follows this one,
+		 * shown beside the approve button
+		 */
+		consentNote?: string;
 	};
 	/**
 	 * Arbitrary state data to pass through the approval flow
@@ -514,6 +519,7 @@ export async function renderApprovalDialog(
 	const serverName = sanitizeText(server.name);
 	const clientName = client?.clientName ? sanitizeText(client.clientName) : "Unknown MCP Client";
 	const serverDescription = server.description ? sanitizeText(server.description) : "";
+	const consentNote = server.consentNote ? sanitizeText(server.consentNote) : "";
 
 	// Validate URLs then HTML-escape for safe use in attributes
 	const logoUrl = server.logo ? sanitizeText(sanitizeUrl(server.logo)) : "";
@@ -611,6 +617,14 @@ export async function renderApprovalDialog(
 
           .description {
             color: #555;
+          }
+
+          .consent-note {
+            background: #fff8e1;
+            border: 1px solid #f0dfa0;
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            color: #6b5900;
           }
 
           .client-info {
@@ -807,6 +821,8 @@ export async function renderApprovalDialog(
             </div>
 
             <p>This MCP Client is requesting to be authorized on ${serverName}. If you approve, you will be redirected to complete authentication.</p>
+
+            ${consentNote ? `<p class="consent-note">${consentNote}</p>` : ""}
 
             <form method="post" action="${new URL(request.url).pathname}">
               <input type="hidden" name="state" value="${encodedState}">

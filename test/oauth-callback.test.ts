@@ -222,4 +222,60 @@ describe("a consent that granted only some of what was asked", () => {
 		expect(response.status).toBe(403);
 		expect(await response.text()).toMatch(/Gmail permission/);
 	});
+
+	// The state that brought the browser in was spent on arrival, so a bare
+	// error page would strand the person: nothing on it could reopen Google's
+	// screen, and the whole flow would have to be restarted from the client.
+	test("offers a retry that reopens Google's consent screen directly", async () => {
+		const kv = memoryKv();
+		serveGoogle("owner@example.com", {
+			scope: "https://www.googleapis.com/auth/userinfo.email",
+		});
+		const response = await GoogleHandler.fetch(
+			await callbackRequest(kv),
+			envFor(kv, "*", []) as never,
+			{} as never,
+		);
+		const html = await response.text();
+		const retry = html.match(/href="(https:\/\/accounts\.google\.com[^"]+)"/)?.[1] ?? "";
+		expect(retry).toContain("state=");
+
+		// The link only works if its state token exists and is bound to this
+		// browser: a fresh state in KV and a fresh session cookie beside it.
+		const state = new URL(retry.replace(/&amp;/g, "&")).searchParams.get("state") ?? "";
+		expect(await kv.get(`oauth:state:${state}`)).not.toBeNull();
+		const cookie = response.headers.get("Set-Cookie") ?? "";
+		expect(cookie).toContain("__Host-CONSENTED_STATE=");
+	});
+
+	test("a retried consent that grants everything completes the sign-in", async () => {
+		const kv = memoryKv();
+		const completed: string[] = [];
+		serveGoogle("owner@example.com", {
+			scope: "https://www.googleapis.com/auth/userinfo.email",
+		});
+		const refusal = await GoogleHandler.fetch(
+			await callbackRequest(kv),
+			envFor(kv, "*", completed) as never,
+			{} as never,
+		);
+		const html = await refusal.text();
+		const retry = (html.match(/href="(https:\/\/accounts\.google\.com[^"]+)"/)?.[1] ?? "").replace(
+			/&amp;/g,
+			"&",
+		);
+		const state = new URL(retry).searchParams.get("state") ?? "";
+		const cookie = (refusal.headers.get("Set-Cookie") ?? "").split(";")[0] ?? "";
+
+		serveGoogle("owner@example.com");
+		const second = await GoogleHandler.fetch(
+			new Request(`https://server.example/callback?code=abc&state=${state}`, {
+				headers: { Cookie: cookie },
+			}),
+			envFor(kv, "*", completed) as never,
+			{} as never,
+		);
+		expect(second.status).toBe(302);
+		expect(completed).toEqual(["owner@example.com"]);
+	});
 });
