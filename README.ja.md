@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![27 tools](https://img.shields.io/badge/tools-27-0b7285)](#-できること)
-[![tests](https://img.shields.io/badge/tests-250_passing-success?logo=bun&logoColor=white)](#-テスト)
+[![tests](https://img.shields.io/badge/tests-253_passing-success?logo=bun&logoColor=white)](#-テスト)
 
 *[English README](./README.md) · [简体中文](./README.zh.md)*
 
@@ -73,7 +73,7 @@ gcloud services enable gmail.googleapis.com
 
 以下の2項目には設定用のAPIがないため、[Google Cloudコンソール](https://console.cloud.google.com/)で操作してください。
 
-- [**OAuth同意画面**](https://console.cloud.google.com/auth/overview)で、ユーザーの種類に*External*を選びます。審査が完了するまでは、接続するGoogleアカウントを**テストユーザー**に登録します。
+- [**OAuth同意画面**](https://console.cloud.google.com/auth/overview)で、ユーザーの種類に*External*を選び、**Audience**の**Publish app**で公開します。Testingのままだと、Googleは7日ごとにすべてのrefresh tokenを失効させ、接続もそのたびに切れます。公開後はログイン時に未確認アプリの警告が出ますが、最大100アカウントまで接続できます。
 - [**認証情報**](https://console.cloud.google.com/apis/credentials) **→ 認証情報を作成 → OAuthクライアントID** → *ウェブアプリケーション*。承認済みのリダイレクトURIに`https://<ホスト名>/callback`を追加し、クライアントIDとシークレットを控えておきます。
 
 `<ホスト名>`は、Workerに向けた独自ドメインか、割り当てられるworkers.devのホスト名です。先にデプロイしてから登録しても構いません。Workerが`/`で配信する手順ページに、そのままの値が出ています。
@@ -273,7 +273,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 
 ## ✅ テスト
 
-250件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定、サインイン時のCSRFとstateの照合に加えて、Gmailの代役を立ててツール自体の動作も確かめています。セッションの所有者判定、宛先の組み立て、添付ファイルの選択、一部が失敗した読み取りの返し方まで含みます。
+253件の単体テストで、メールの組み立て（MIMEの入れ子、RFC 2047の折り返し、RFC 2231のファイル名、CR/LFの拒否、base64の折り返し）、文字コードをまたぐ本文の取り出し、返信と転送の組み立て、Googleのトークン処理、サインイン許可リストの判定、サインイン時のCSRFとstateの照合に加えて、Gmailの代役を立ててツール自体の動作も確かめています。セッションの所有者判定、宛先の組み立て、添付ファイルの選択、一部が失敗した読み取りの返し方まで含みます。
 
 実際のGmailアカウントの間でも、すべてのツールの動作を確認しました。
 
@@ -293,7 +293,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 ```sh
 bun run dev     # wrangler dev、:8788
 bun run check   # biome + tsc
-bun test        # 単体テスト250件
+bun test        # 単体テスト253件
 bun run assets  # ライト・ダークの図を再生成
 bun run deploy
 ```

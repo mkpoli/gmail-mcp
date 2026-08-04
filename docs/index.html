@@ -146,7 +146,7 @@ gcloud services enable gmail.googleapis.com</pre>
 
 <p>The consent screen and the OAuth client have no API, so these two happen in the <a href="https://console.cloud.google.com/">Cloud console</a>:</p>
 <ol class="steps">
-  <li><a href="https://console.cloud.google.com/auth/overview"><b>OAuth consent screen</b></a> → <i>External</i> → app name and your email. While the app is unverified, add every mailbox you plan to connect under <b>Test users</b>.</li>
+  <li><a href="https://console.cloud.google.com/auth/overview"><b>OAuth consent screen</b></a> → <i>External</i> → app name and your email, then under <b>Audience</b> press <b>Publish app</b>. Left in Testing, Google expires every refresh token after 7 days and each connection dies with its token. Published, sign-in shows an unverified-app warning and up to 100 accounts can connect.</li>
   <li><a href="https://console.cloud.google.com/apis/credentials"><b>Credentials</b></a> <b>→ Create credentials → OAuth client ID</b> → <i>Web application</i>, with one authorized redirect URI:
     <pre id="redirect">https://&lt;your-host&gt;/callback</pre>
     Keep the client ID and secret for the next step.</li>

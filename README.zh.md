@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![27 tools](https://img.shields.io/badge/tools-27-0b7285)](#能做什么)
-[![tests](https://img.shields.io/badge/tests-250_passing-success?logo=bun&logoColor=white)](#测试)
+[![tests](https://img.shields.io/badge/tests-253_passing-success?logo=bun&logoColor=white)](#测试)
 
 *[English README](./README.md) · [日本語版](./README.ja.md)*
 
@@ -73,7 +73,7 @@ gcloud services enable gmail.googleapis.com
 
 接下来两步Google没有开放API，只能在[Google Cloud控制台](https://console.cloud.google.com/)里做：
 
-- [**OAuth同意屏幕**](https://console.cloud.google.com/auth/overview) → *External*。应用未通过验证期间，把计划连接的每个邮箱加进**测试用户**。
+- [**OAuth同意屏幕**](https://console.cloud.google.com/auth/overview) → *External*，然后在**Audience**里点**Publish app**发布。停留在Testing状态时，Google每7天让所有refresh token过期，连接随之失效；发布后登录时会出现未验证应用的警告，最多可连接100个账号。
 - [**凭据**](https://console.cloud.google.com/apis/credentials) **→ 创建凭据 → OAuth客户端ID** → *Web应用*，把`https://<你的主机名>/callback`加进已获授权的重定向URI。客户端ID和密钥记下来。
 
 `<你的主机名>`是你指向Worker的域名，或者它拿到的workers.dev主机名。先部署再回来填也行，Worker在`/`提供的那份指南里写着确切的值。
@@ -273,7 +273,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 
 ## 测试
 
-250个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，登录流程里的CSRF和state校验，以及用一个替身Gmail跑通工具本身：会话归属判定、收件人组装、附件选择，还有读取部分失败时返回什么。
+253个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，登录流程里的CSRF和state校验，以及用一个替身Gmail跑通工具本身：会话归属判定、收件人组装、附件选择，还有读取部分失败时返回什么。
 
 另外，所有工具都在真实Gmail账号上跑过，再用另一个账号检查收到的东西：
 
@@ -293,7 +293,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 ```sh
 bun run dev     # wrangler dev，端口8788
 bun run check   # biome + tsc
-bun test        # 250个单元测试
+bun test        # 253个单元测试
 bun run assets  # 重新生成明暗两套图示
 bun run deploy
 ```
