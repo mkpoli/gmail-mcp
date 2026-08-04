@@ -132,6 +132,22 @@ describe("refreshGoogleToken", () => {
 		).rejects.toThrow("google token refresh failed");
 	});
 
+	// invalid_grant reads as a server fault when repeated back raw, and every
+	// tool call fails on it the same way until the account signs in again. The
+	// error is the one place those instructions can travel.
+	test("names what to do when the grant itself has died", async () => {
+		mockFetch(
+			() =>
+				new Response(JSON.stringify({ error: "invalid_grant" }), {
+					status: 400,
+					headers: { "Content-Type": "application/json" },
+				}),
+		);
+		expect(
+			refreshGoogleToken({ client_id: "cid", client_secret: "sec", refresh_token: "rt" }),
+		).rejects.toThrow(/sign in again.*In production/s);
+	});
+
 	test("rejects a refresh response missing access_token or expires_in", async () => {
 		mockFetch(() => Response.json({ expires_in: 3599 }));
 		expect(
