@@ -151,13 +151,14 @@ export async function refreshGoogleToken({
 	if (!resp.ok) {
 		const detail = await readBoundedText(resp.body);
 		// invalid_grant is the refresh token itself dying, and every tool call
-		// fails on it identically until the account signs in again. The two ways
-		// it dies: the account revoked access, or the OAuth app sits in Testing,
-		// where Google expires every refresh token after seven days. Naming both
-		// turns a wall of identical failures into the two actions that end them.
+		// fails on it identically until the account signs in again. Naming the
+		// ways it dies turns a wall of identical failures into the action that
+		// ends them: a password change revokes every Gmail-scoped token the
+		// account has issued, revoking the app by hand does the same, and an
+		// OAuth app left in Testing has each sign-in expire after seven days.
 		if (detail.includes("invalid_grant")) {
 			throw new Error(
-				"Google no longer accepts this account's sign-in. Reconnect this MCP server and sign in again. If this keeps happening every few days, the deployment's OAuth app is in Testing, where Google expires each sign-in after 7 days — publish it to In production at https://console.cloud.google.com/auth/overview to stop that.",
+				"Google no longer accepts this account's sign-in. Reconnect this MCP server and sign in again. This follows a password change (Google revokes Gmail tokens with it) or a revocation at https://myaccount.google.com/connections; when it recurs every 7 days, the deployment's OAuth app is in Testing — publish it to In production at https://console.cloud.google.com/auth/overview.",
 			);
 		}
 		throw new Error(`google token refresh failed: ${resp.status} ${detail}`);

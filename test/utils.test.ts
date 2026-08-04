@@ -145,7 +145,7 @@ describe("refreshGoogleToken", () => {
 		);
 		expect(
 			refreshGoogleToken({ client_id: "cid", client_secret: "sec", refresh_token: "rt" }),
-		).rejects.toThrow(/sign in again.*In production/s);
+		).rejects.toThrow(/sign in again.*password change.*In production/s);
 	});
 
 	test("rejects a refresh response missing access_token or expires_in", async () => {
