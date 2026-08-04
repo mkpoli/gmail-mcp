@@ -1,7 +1,7 @@
 {
   "identifier": "mkpoli-gmail-mcp",
   "name": "Gmail MCP",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Multi-account Gmail on a Cloudflare Worker you deploy yourself: search and read mail, send, reply-all with quoted history, forward, attachments and inline images, drafts, labels, and threads. Each connection binds to one Google account and the refresh token stays in your own Cloudflare account.",
   "author": "mkpoli",
   "authorUrl": "https://github.com/mkpoli",

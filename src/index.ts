@@ -151,7 +151,7 @@ type InlineImageArg = z.infer<typeof inlineImageSchema>;
 export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
 		name: "Gmail MCP",
-		version: "0.2.0",
+		version: "0.2.1",
 	});
 
 	// The account this object serves, from the header the OAuth boundary stamps.
