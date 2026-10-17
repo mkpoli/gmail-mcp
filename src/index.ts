@@ -16,6 +16,7 @@ import {
 	extractBody,
 	extractHtmlBody,
 	type FilePart,
+	fitsOneRead,
 	forwardHeaderBlock,
 	forwardHtmlBlock,
 	forwardSubject,
@@ -147,6 +148,28 @@ const inlineImageSchema = z.object({
 		.describe("A staged image from the stage_attachment tools, instead of content"),
 });
 type InlineImageArg = z.infer<typeof inlineImageSchema>;
+
+// A forward's attachments pass straight from Gmail into the message and never
+// reach the caller, so the ceilings that apply are the ones on a single read
+// and on the assembled message. Both are settled on declared sizes, before
+// anything is fetched: the builder's own check comes only once everything is
+// in memory.
+function assertForwardable(files: { filename: string; size: number }[]): void {
+	const unreadable = files.filter((a) => !fitsOneRead(a.size)).map((a) => a.filename);
+	if (unreadable.length > 0) {
+		throw new Error(
+			`${unreadable.join(", ")} is too large for this server to read in one piece; forward the message from a mail client`,
+		);
+	}
+	// Counted the way the builder counts, so what passes here is what it will
+	// accept rather than a different figure.
+	const total = files.reduce((sum, a) => sum + encodedSize(a.size), 0);
+	if (total > MAX_ENCODED_ATTACHMENT_BYTES) {
+		throw new Error(
+			"this message carries more attachment data than can be forwarded; forward it from a mail client",
+		);
+	}
+}
 
 export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
@@ -1400,7 +1423,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				includeAttachments: z
 					.boolean()
 					.default(false)
-					.describe("Re-attach the original's files, within the attachment size budget"),
+					.describe(
+						"Re-attach the original's files. A forward that cannot carry all of them is refused, not sent without them",
+					),
 			},
 			async ({ messageId, to, cc, body, htmlBody, includeAttachments }) => {
 				const original = await this.api<GmailMessage>(
@@ -1422,22 +1447,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 				const originalBody = truncate(await this.messageBody(original), BODY_LIMIT);
 
 				const own = collectAttachments(original.payload).filter((a) => !a.enclosed);
-				const carried = own.filter((a) => a.size <= ATTACHMENT_BYTE_LIMIT);
-				const skipped = own.filter((a) => a.size > ATTACHMENT_BYTE_LIMIT).map((a) => a.filename);
-				let carriedBytes = 0;
+				if (includeAttachments) assertForwardable(own);
 				const fetched = includeAttachments
-					? await this.mapLimited(carried, 4, async (a) => {
-							// The builder's ceiling is reached only once everything is in
-							// memory, which for a forward is far too late: these bytes come
-							// from Gmail rather than from the caller.
-							// Counted the way the builder counts, so what passes here is
-							// what it will accept rather than a different figure.
-							carriedBytes += encodedSize(a.size);
-							if (carriedBytes > MAX_ENCODED_ATTACHMENT_BYTES) {
-								throw new Error(
-									"this message carries more attachment data than can be forwarded; forward it from a mail client",
-								);
-							}
+					? await this.mapLimited(own, 4, async (a) => {
 							// Which store the bytes are in is told by the id, not by
 							// whether there are any: an empty file has none either way,
 							// and asking Gmail for it under a blank id is a 404.
@@ -1484,7 +1496,6 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 					id: m.id,
 					threadId: m.threadId,
 					attachmentsForwarded: attachments.length,
-					...(includeAttachments && skipped.length > 0 ? { skippedTooLarge: skipped } : {}),
 				});
 			},
 		);

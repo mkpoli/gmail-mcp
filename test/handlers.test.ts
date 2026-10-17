@@ -1035,6 +1035,76 @@ describe("a message that arrived as a file", () => {
 	});
 });
 
+describe("forwarding large attachments", () => {
+	// The declared sizes decide; the bytes served back are a stand-in.
+	const withFiles = (...sizes: number[]) =>
+		message("m1", {
+			payload: {
+				mimeType: "multipart/mixed",
+				parts: [
+					{ mimeType: "text/plain", body: { data: b64url("body") } },
+					...sizes.map((size, n) => ({
+						mimeType: "application/zip",
+						filename: `file${n}.zip`,
+						body: { size, attachmentId: `ATT-${n}` },
+					})),
+				],
+			},
+		});
+	const sends = () => requests.filter((r) => r.url.includes("/messages/send"));
+
+	// Too large to hand back to a caller is not too large to forward: the
+	// bytes never leave the server.
+	test("carries a file larger than a download may return", async () => {
+		const { handlers } = await boot();
+		serveGmail([
+			[/\/messages\/m1\?format=full/, () => withFiles(2_040_746)],
+			[/\/attachments\/ATT-0/, () => ({ size: 2_040_746, data: b64url("zip bytes") })],
+			[/\/messages\/send/, () => ({ id: "f1", threadId: "t2" })],
+		]);
+		const out = result(
+			await tool(
+				handlers,
+				"forward_message",
+			)({ messageId: "m1", to: "b@example.com", includeAttachments: true }),
+		);
+		expect(out.attachmentsForwarded).toBe(1);
+		expect(sentMime("/messages/send")).toContain("file0.zip");
+	});
+
+	test("refuses, without sending, a file one read cannot bring back", async () => {
+		const { handlers } = await boot();
+		serveGmail([
+			[/\/messages\/m1\?format=full/, () => withFiles(100, 5_000_000)],
+			[/\/attachments\//, () => ({ size: 100, data: b64url("small") })],
+			[/\/messages\/send/, () => ({ id: "f1", threadId: "t2" })],
+		]);
+		await expect(
+			tool(
+				handlers,
+				"forward_message",
+			)({ messageId: "m1", to: "b@example.com", includeAttachments: true }),
+		).rejects.toThrow(/file1\.zip is too large/);
+		expect(sends()).toHaveLength(0);
+	});
+
+	test("refuses, without fetching or sending, more than a message can carry", async () => {
+		const { handlers } = await boot();
+		serveGmail([
+			[/\/messages\/m1\?format=full/, () => withFiles(3_100_000, 3_100_000)],
+			[/\/messages\/send/, () => ({ id: "f1", threadId: "t2" })],
+		]);
+		await expect(
+			tool(
+				handlers,
+				"forward_message",
+			)({ messageId: "m1", to: "b@example.com", includeAttachments: true }),
+		).rejects.toThrow(/more attachment data than can be forwarded/);
+		expect(requests.filter((r) => r.url.includes("/attachments/"))).toHaveLength(0);
+		expect(sends()).toHaveLength(0);
+	});
+});
+
 describe("what a listing carries", () => {
 	// A read that only wanted the body should not pay for the attachments. The
 	// bytes are fetched when they are asked for, not carried in every listing.
