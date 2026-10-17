@@ -189,7 +189,7 @@ function assertForwardable(files: { filename: string; size: number }[]): void {
 export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
 		name: "Gmail MCP",
-		version: "0.2.1",
+		version: "0.3.0",
 	});
 
 	// The account this object serves, from the header the OAuth boundary stamps.
