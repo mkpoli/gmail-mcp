@@ -26,6 +26,12 @@ const MAX_HEADER_RUN = 900;
 // once — the chunks, the joined bytes, the decoded string, the parsed object —
 // so the ceiling sits well below the isolate's own limit rather than near it.
 const MAX_RESPONSE_BYTES = 6_000_000;
+// Gmail returns an attachment's bytes as base64url inside a JSON object, so a
+// file is readable when that encoding and the object around it fit one
+// response.
+export function fitsOneRead(bytes: number): boolean {
+	return encodedSize(bytes) + 1024 <= MAX_RESPONSE_BYTES;
+}
 // How long a single Gmail call may take before it is abandoned.
 const GMAIL_TIMEOUT_MS = 30_000;
 // As much of a failure as is worth repeating back to the caller.
