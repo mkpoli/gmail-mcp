@@ -5,7 +5,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-6E56CF)](https://modelcontextprotocol.io/)
 [![OAuth 2.1](https://img.shields.io/badge/auth-OAuth_2.1_+_PKCE-2ea44f)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
 [![27 tools](https://img.shields.io/badge/tools-27-0b7285)](#能做什么)
-[![tests](https://img.shields.io/badge/tests-253_passing-success?logo=bun&logoColor=white)](#测试)
+[![tests](https://img.shields.io/badge/tests-260_passing-success?logo=bun&logoColor=white)](#测试)
 
 *[English README](./README.md) · [日本語版](./README.ja.md)*
 
@@ -156,11 +156,11 @@ claude mcp add --transport http gmail-work     https://<你的主机名>/mcp/wor
 
 邮件结构和普通邮件客户端的一样：纯文本附一份HTML替代版本，文件附件，以`cid:`引用的内嵌图片，整体嵌套成`multipart/mixed › multipart/related › multipart/alternative`。主题和显示名用RFC 2047编码，文件名用RFC 2231，日文、中文、emoji都能完整送达。
 
-`reply_all`读取原信的`Reply-To`、`From`、`To`、`Cc`，去掉你自己的地址和你可以用来发信的地址，用对方写到的那个地址回信，接上`References`链，并按你发送的格式引用原文。`forward_message`复现被转发邮件的信封，还可以把原信附件重新带上。
+`reply_all`读取原信的`Reply-To`、`From`、`To`、`Cc`，去掉你自己的地址和你可以用来发信的地址，用对方写到的那个地址回信，接上`References`链，并按你发送的格式引用原文。`forward_message`复现被转发邮件的信封，还可以把原信附件重新带上；附件无法全部带上时，邮件不会发出。
 
 给`create_draft`传`replyToMessageId`，回信就先存成草稿：草稿加入原信的会话，带上`In-Reply-To`和`References`，收件人按reply-all推导，主题加`Re:`，并引用原文。`update_draft`只改动传入的字段，没传的一律从草稿读回保留：收件人、正文、在其他客户端手动添加的附件、所属会话都不会丢。装不进工具参数的大文件改用暂存：`stage_attachment_begin`返回一个上传URL，用`curl -T`一次传入原始字节，也可以用`stage_attachment_append`分段传base64，之后各处的`attachments`都接受它的`stagingId`。
 
-读取有意设了上限：邮件和会话正文有字符数预算，整个响应有字节上限，附件只在足够小的时候才直接返回。很长的邮件列表会话或者很大的文件会被截断，并附上说明，不会淹掉助手的上下文。
+读取有意设了上限：邮件和会话正文有字符数预算，整个响应有字节上限，附件只在足够小的时候才直接返回。很长的邮件列表会话会被截断，并附上说明，不会淹掉助手的上下文。较大的附件以下载链接返回，会话保持期间一小时内有效，用`curl -o`存到本地，文件内容不经过对话。
 
 ---
 
@@ -273,14 +273,14 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 
 ## 测试
 
-253个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，登录流程里的CSRF和state校验，以及用一个替身Gmail跑通工具本身：会话归属判定、收件人组装、附件选择，还有读取部分失败时返回什么。
+260个单元测试覆盖邮件构建（MIME嵌套、RFC 2047折行、RFC 2231文件名、CR/LF拒绝、base64换行）、跨字符集的正文提取、回复与转发组装、Google token的交换与刷新、登录允许名单，登录流程里的CSRF和state校验，以及用一个替身Gmail跑通工具本身：会话归属判定、收件人组装、附件选择，还有读取部分失败时返回什么。
 
 另外，所有工具都在真实Gmail账号上跑过，再用另一个账号检查收到的东西：
 
 | 项目 | 结果 |
 | :-- | :-- |
 | 编码 | 日文主题跨encoded word折行后正常还原；emoji、ZWJ序列、RTL阿拉伯文、组合符号、生僻CJK字符原样往返 |
-| 附件 | 名为`請求書.csv`的文件发出、送达、再下载回来，逐字节一致；`cid:`内嵌图片在收件方正常渲染 |
+| 附件 | 名为`請求書.csv`的文件发出、送达、再下载回来，逐字节一致；`cid:`内嵌图片在收件方正常渲染；一个2MB的zip经下载链接取回，大小与原件一致，可以正常解压 |
 | 会话归组 | `reply_all`把收件人填成原发件人，保留第三方的`Cc`，去掉自己的地址，在同一会话里引用了原文 |
 | 双账号 | 两个账号同时连到一份部署；一个账号的邮件ID在另一个账号上返回`404` |
 | 整理 | 建了一个嵌套的CJK标签，改名、批量套用、删除；会话和单封邮件移入回收站后都成功恢复 |
@@ -293,7 +293,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 ```sh
 bun run dev     # wrangler dev，端口8788
 bun run check   # biome + tsc
-bun test        # 253个单元测试
+bun test        # 260个单元测试
 bun run assets  # 重新生成明暗两套图示
 bun run deploy
 ```
