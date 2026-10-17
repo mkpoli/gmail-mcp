@@ -740,6 +740,103 @@ describe("get_attachment", () => {
 	});
 });
 
+describe("download links", () => {
+	// The declared size decides; the bytes served back are a stand-in.
+	const withZip = (size: number) =>
+		message("m1", {
+			payload: {
+				mimeType: "multipart/mixed",
+				parts: [
+					{ mimeType: "text/plain", body: { data: b64url("body") } },
+					{
+						mimeType: "text/html",
+						filename: "配布資料.zip",
+						body: { size, attachmentId: "fresh-id" },
+					},
+				],
+			},
+		});
+
+	// fetch() teaches the object where it answers; the handler is called
+	// directly here, so the origin is set the way that request would have.
+	async function bootAt() {
+		const made = await boot();
+		(made.agent as { origin: string }).origin = "https://gmail.example.com";
+		const doFetch = (made.agent as { fetch: (r: Request) => Promise<Response> }).fetch.bind(
+			made.agent,
+		);
+		return { ...made, doFetch };
+	}
+
+	test("a file too large to return inline comes back as a link that serves it", async () => {
+		const { handlers, doFetch } = await bootAt();
+		serveGmail([
+			[/\/messages\/m1\?format=full/, () => withZip(2_040_746)],
+			[/attachments\/fresh-id/, () => ({ size: 2_040_746, data: b64url("zip bytes") })],
+		]);
+		const out = result(
+			await tool(handlers, "get_attachment")({ messageId: "m1", attachmentId: "stale" }),
+		);
+		expect(out.contentBase64).toBeUndefined();
+		// Offering the link costs no read of the file itself.
+		expect(requests.filter((r) => r.url.includes("/attachments/"))).toHaveLength(0);
+		const url = String(out.downloadUrl);
+		expect(url).toStartWith(
+			`https://gmail.example.com/download/${encodeURIComponent("streamable-http:session-1")}/`,
+		);
+
+		const response = await doFetch(new Request(url));
+		expect(response.status).toBe(200);
+		expect(await response.text()).toBe("zip bytes");
+		// Served as an opaque download, never rendered on this origin.
+		expect(response.headers.get("Content-Type")).toBe("application/octet-stream");
+		expect(response.headers.get("Content-Disposition")).toBe(
+			`attachment; filename*=UTF-8''${encodeURIComponent("配布資料.zip")}`,
+		);
+	});
+
+	test("a wrong secret or an expired link is turned away", async () => {
+		const { handlers, doFetch, storage } = await bootAt();
+		serveGmail([[/\/messages\/m1\?format=full/, () => withZip(2_040_746)]]);
+		const out = result(
+			await tool(handlers, "get_attachment")({ messageId: "m1", attachmentId: "" }),
+		);
+		const url = String(out.downloadUrl);
+		const forged = `${url.slice(0, url.lastIndexOf("/"))}/not-the-secret`;
+		expect((await doFetch(new Request(forged))).status).toBe(404);
+
+		const key = [...storage.keys()].find((k) => k.startsWith("download:")) ?? "";
+		const offer = storage.get(key) as { at: number };
+		storage.set(key, { ...offer, at: Date.now() - 2 * 60 * 60 * 1000 });
+		expect((await doFetch(new Request(url))).status).toBe(404);
+	});
+
+	test("a file one read cannot bring back gets no link", async () => {
+		const { handlers } = await bootAt();
+		serveGmail([[/\/messages\/m1\?format=full/, () => withZip(5_000_000)]]);
+		const out = result(
+			await tool(handlers, "get_attachment")({ messageId: "m1", attachmentId: "" }),
+		);
+		expect(out.downloadUrl).toBeUndefined();
+		expect(String(out.error)).toContain("too large for this server to read");
+	});
+
+	test("the public route takes only GET", async () => {
+		const wrongMethod = await worker.fetch(
+			new Request("https://example.com/download/a/b/c", { method: "PUT", body: "x" }),
+			{} as never,
+			{} as never,
+		);
+		expect(wrongMethod.status).toBe(405);
+		const malformed = await worker.fetch(
+			new Request("https://example.com/download/only-a-name"),
+			{} as never,
+			{} as never,
+		);
+		expect(malformed.status).toBe(404);
+	});
+});
+
 describe("two attachments that both arrived whole", () => {
 	// Gmail gives an id only to a part it externalises, so parts that arrive
 	// whole have none and are all published with the same empty one. Matching on

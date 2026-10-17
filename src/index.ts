@@ -5,6 +5,7 @@ import { McpAgent } from "agents/mcp";
 import { z } from "zod";
 import {
 	b64urlEncode,
+	b64urlToBytes,
 	b64urlToStandard,
 	buildRfc822,
 	bytesToB64,
@@ -118,6 +119,20 @@ type StagedMeta = {
 	padding: number;
 };
 
+// How long a download link answers after get_attachment hands it out.
+const DOWNLOAD_TTL_MS = 60 * 60 * 1000;
+
+// What a download link points at. The message is read again when the link is
+// fetched, since Gmail reissues attachment ids on every read; the part is
+// found by its place among the message's attachments and checked by name.
+type DownloadMeta = {
+	messageId: string;
+	index: number;
+	filename: string;
+	secret: string;
+	at: number;
+};
+
 const filePartSchema = z.object({
 	filename: z.string().optional().describe("Required with content; a staged file brings its own"),
 	contentType: z
@@ -197,6 +212,10 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		// stage_attachment_begin handed the session that asked for it.
 		if (url.pathname.startsWith("/upload/")) {
 			return this.acceptUpload(request, url);
+		}
+		// A download link works the same way, its secret minted by get_attachment.
+		if (url.pathname.startsWith("/download/")) {
+			return this.serveDownload(request, url);
 		}
 		const account = request.headers.get(ACCOUNT_HEADER)?.toLowerCase();
 		if (account) {
@@ -422,6 +441,106 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 		);
 		if (!att?.data) return "";
 		return decodeAttachmentText(att.data, ref.mimeType, ref.charset);
+	}
+
+	// ---- Download links -----------------------------------------------------
+
+	// Offers a file too large to return inside a reply as a link the caller
+	// fetches outside the conversation, so its bytes never enter a context
+	// window. Nothing is fetched here; the link reads Gmail when it is used.
+	private async offerDownload(
+		messageId: string,
+		index: number,
+		part: { filename: string; mimeType: string; size: number },
+	): Promise<Record<string, unknown>> {
+		const meta = { filename: part.filename, mimeType: part.mimeType, size: part.size };
+		if (!fitsOneRead(part.size)) {
+			return {
+				...meta,
+				error:
+					"this attachment is too large for this server to read in one piece; open it in a mail client",
+			};
+		}
+		const name = this.ctx.id.name;
+		if (!this.origin || !name) {
+			return {
+				...meta,
+				error: "this session cannot hand out a download link; open it in a mail client",
+			};
+		}
+		await this.sweepDownloads();
+		const id = crypto.randomUUID();
+		const offer: DownloadMeta = {
+			messageId,
+			index,
+			filename: part.filename,
+			secret: crypto.randomUUID(),
+			at: Date.now(),
+		};
+		await this.ctx.storage.put(`download:${id}`, offer);
+		return {
+			...meta,
+			downloadUrl: `${this.origin}/download/${encodeURIComponent(name)}/${id}/${offer.secret}`,
+			expiresAt: new Date(offer.at + DOWNLOAD_TTL_MS).toISOString(),
+		};
+	}
+
+	private async sweepDownloads(): Promise<void> {
+		const entries = await this.ctx.storage.list<DownloadMeta>({ prefix: "download:" });
+		const dead = [...entries]
+			.filter(([, offer]) => Date.now() - offer.at > DOWNLOAD_TTL_MS)
+			.map(([key]) => key);
+		// A delete takes at most 128 keys at a time.
+		for (let i = 0; i < dead.length; i += 128) {
+			await this.ctx.storage.delete(dead.slice(i, i + 128));
+		}
+	}
+
+	// The link half of a download. A wrong id, a wrong secret and an expired
+	// link answer alike. The bytes go out as an opaque download whatever the
+	// sender called them: this origin also serves the sign-in pages, and an
+	// attachment rendered here as HTML would run on it.
+	private async serveDownload(request: Request, url: URL): Promise<Response> {
+		if (request.method !== "GET") {
+			return new Response("GET a download URL", { status: 405 });
+		}
+		const [, , , id, secret] = url.pathname.split("/").map(decodeURIComponent);
+		const offer = id ? await this.ctx.storage.get<DownloadMeta>(`download:${id}`) : undefined;
+		// The secret is an unguessable 122-bit UUID compared against storage this
+		// object alone reads, so equality is the whole check.
+		if (!offer || offer.secret !== secret || Date.now() - offer.at > DOWNLOAD_TTL_MS) {
+			return new Response("no download answers to this address", { status: 404 });
+		}
+		let data: string;
+		try {
+			const message = await this.api<GmailMessage>(
+				`/messages/${encodeURIComponent(offer.messageId)}?format=full`,
+			);
+			const part = collectAttachments(message.payload)[offer.index];
+			if (!part || part.filename !== offer.filename) {
+				return new Response("that attachment is no longer in the message", { status: 410 });
+			}
+			data = part.attachmentId
+				? ((
+						await this.api<AttachmentBody>(
+							`/messages/${encodeURIComponent(offer.messageId)}/attachments/${encodeURIComponent(part.attachmentId)}`,
+						)
+					)?.data ?? "")
+				: part.data;
+		} catch (e) {
+			return new Response(`Gmail could not be read: ${e instanceof Error ? e.message : e}`, {
+				status: 502,
+			});
+		}
+		return new Response(b64urlToBytes(data), {
+			headers: {
+				"Content-Type": "application/octet-stream",
+				"Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(offer.filename)}`,
+				"X-Content-Type-Options": "nosniff",
+				"Content-Security-Policy": "sandbox",
+				"Cache-Control": "no-store",
+			},
+		});
 	}
 
 	// ---- Staged attachments -------------------------------------------------
@@ -1502,7 +1621,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 		this.server.tool(
 			"get_attachment",
-			`Download an attachment from a message in ${account}. Returns base64 while it stays small enough to read; text types come back decoded`,
+			`Download an attachment from a message in ${account}. Returns base64 while it stays small enough to read, and text types decoded; a larger file comes back as a downloadUrl to fetch with curl -o <file> '<downloadUrl>', valid for ${DOWNLOAD_TTL_MS / 60_000} minutes`,
 			{
 				messageId: z.string(),
 				attachmentId: z
@@ -1556,13 +1675,14 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 							: "this message carries no attachments",
 					);
 				}
-				if (part.size > ATTACHMENT_BYTE_LIMIT) {
-					return this.text({
-						filename: part.filename,
-						mimeType: part.mimeType,
-						size: part.size,
-						error: `attachment is larger than the ${ATTACHMENT_BYTE_LIMIT}-byte budget; fetch it with a regular mail client`,
-					});
+				// Decided on the declared size, before any bytes are fetched. Text
+				// comes back truncated, so only the read itself bounds it; base64
+				// comes back whole and has to fit the reply.
+				const tooLarge = textOnly
+					? part.size > ATTACHMENT_BYTE_LIMIT
+					: encodedSize(part.size) > ATTACHMENT_INLINE_LIMIT;
+				if (tooLarge) {
+					return this.text(await this.offerDownload(messageId, parts.indexOf(part), part));
 				}
 
 				// A part that arrived whole carries its own bytes; only an
@@ -1588,11 +1708,9 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 						text: truncate(decodeAttachmentText(data, part.mimeType, part.charset), BODY_LIMIT),
 					});
 				}
+				// A declared size can understate what arrives.
 				if (data.length > ATTACHMENT_INLINE_LIMIT) {
-					return this.text({
-						...meta,
-						error: `this attachment encodes to ${data.length} characters, past the ${ATTACHMENT_INLINE_LIMIT} this server returns inline; open it in a mail client`,
-					});
+					return this.text(await this.offerDownload(messageId, parts.indexOf(part), part));
 				}
 				// Handed straight back, this is base64url, which the send tools refuse.
 				// Returning it in the form they accept makes the round trip work.
@@ -1871,25 +1989,44 @@ function bodyLimitFor(path: string): number | null {
 	return null;
 }
 
-// Carries a staged upload to the session that minted its URL. The path is the
-// whole credential — session name, staging id, secret — and the session judges
-// it; out here the body is only ever streamed through. The register limiter
-// gates it because the two share a shape: no credentials up front, and each
-// call wakes or writes something that costs the deployment.
-async function uploadRoute(request: Request, env: Env, path: string): Promise<Response> {
-	if (request.method !== "PUT") {
-		return new Response("PUT the raw file bytes to an upload URL", { status: 405 });
+// The two addresses a session mints for files to cross outside tool calls.
+const FILE_ROUTES = {
+	"/upload/": {
+		method: "PUT",
+		wrongMethod: "PUT the raw file bytes to an upload URL",
+		missing: "no staging answers to this address",
+	},
+	"/download/": {
+		method: "GET",
+		wrongMethod: "GET a download URL",
+		missing: "no download answers to this address",
+	},
+} as const;
+
+// Carries an upload or a download to the session that minted its URL. The
+// path is the whole credential — session name, file id, secret — and the
+// session judges it; out here the bytes are only ever streamed through. The
+// register limiter gates it because the two share a shape: no credentials up
+// front, and each call wakes or writes something that costs the deployment.
+async function fileRoute(
+	request: Request,
+	env: Env,
+	path: string,
+	route: (typeof FILE_ROUTES)[keyof typeof FILE_ROUTES],
+): Promise<Response> {
+	if (request.method !== route.method) {
+		return new Response(route.wrongMethod, { status: 405 });
 	}
 	const segments = path.split("/");
 	const name = decodeURIComponent(segments[2] ?? "");
 	if (segments.length !== 5 || !name) {
-		return new Response("no staging answers to this address", { status: 404 });
+		return new Response(route.missing, { status: 404 });
 	}
 	if (env.REGISTER_LIMITER) {
 		const caller = request.headers.get("cf-connecting-ip") ?? "unknown";
 		const { success } = await env.REGISTER_LIMITER.limit({ key: caller });
 		if (!success) {
-			return new Response("Too many uploads", { status: 429 });
+			return new Response("Too many requests", { status: 429 });
 		}
 	}
 	// A name that never belonged to a session wakes an object with no grant,
@@ -1899,15 +2036,15 @@ async function uploadRoute(request: Request, env: Env, path: string): Promise<Re
 		const session = await getAgentByName<Env, GmailMCP>(env.MCP_OBJECT, name);
 		return await session.fetch(request);
 	} catch {
-		return new Response("no staging answers to this address", { status: 404 });
+		return new Response(route.missing, { status: 404 });
 	}
 }
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const path = new URL(request.url).pathname;
-		if (path.startsWith("/upload/")) {
-			return uploadRoute(request, env, path);
+		for (const [prefix, route] of Object.entries(FILE_ROUTES)) {
+			if (path.startsWith(prefix)) return fileRoute(request, env, path, route);
 		}
 		const limit = request.method === "POST" ? bodyLimitFor(path) : null;
 		if (limit === null) {

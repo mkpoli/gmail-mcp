@@ -809,7 +809,7 @@ export function headerValue(message: GmailMessage | undefined, name: string): st
 		?.value;
 }
 
-function b64urlToBytes(s: string): Uint8Array {
+export function b64urlToBytes(s: string): Uint8Array {
 	const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
 	return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
 }
