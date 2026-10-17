@@ -1621,7 +1621,7 @@ export class GmailMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 		this.server.tool(
 			"get_attachment",
-			`Download an attachment from a message in ${account}. Returns base64 while it stays small enough to read, and text types decoded; a larger file comes back as a downloadUrl to fetch with curl -o <file> '<downloadUrl>', valid for ${DOWNLOAD_TTL_MS / 60_000} minutes`,
+			`Download an attachment from a message in ${account}. Returns base64 while it stays small enough to read, and text types decoded; a larger file comes back as a downloadUrl to fetch with curl -o <file> '<downloadUrl>', valid for ${DOWNLOAD_TTL_MS / 60_000} minutes while this session stays open`,
 			{
 				messageId: z.string(),
 				attachmentId: z
