@@ -292,7 +292,7 @@ Workersの**Free**プランには、1回の実行で外部へ送れるリクエ�
 
 ```sh
 bun run dev     # wrangler dev、:8788
-bun run check   # biome + tsc
+bun run check   # biome + tsrs
 bun test        # 単体テスト260件
 bun run assets  # ライト・ダークの図を再生成
 bun run deploy

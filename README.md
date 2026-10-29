@@ -308,7 +308,7 @@ Beyond that, every tool has run against real Gmail accounts, with a separate acc
 
 ```sh
 bun run dev     # wrangler dev on :8788
-bun run check   # biome + tsc
+bun run check   # biome + tsrs
 bun test        # 260 unit tests
 bun run assets  # regenerate the light and dark diagrams
 bun run deploy
