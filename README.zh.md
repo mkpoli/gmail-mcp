@@ -292,7 +292,7 @@ Worker在处理请求期间会在内存里解密邮件，任何托管中继都�
 
 ```sh
 bun run dev     # wrangler dev，端口8788
-bun run check   # biome + tsc
+bun run check   # biome + tsrs
 bun test        # 260个单元测试
 bun run assets  # 重新生成明暗两套图示
 bun run deploy

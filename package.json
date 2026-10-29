@@ -28,7 +28,7 @@
 	"scripts": {
 		"dev": "wrangler dev",
 		"deploy": "wrangler deploy",
-		"check": "biome check src test && tsc --noEmit",
+		"check": "biome check src test && tsrs --noEmit",
 		"fix": "biome check --write src test",
 		"test": "bun test",
 		"types": "wrangler types",
@@ -63,7 +63,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.5",
 		"@types/bun": "^1.3.14",
-		"typescript": "^5.5.2",
+		"tsrs": "0.20.1-ts7.1.0-beta",
 		"wrangler": "^4.90.0"
 	}
 }
