@@ -1974,6 +1974,9 @@ const provider = new OAuthProvider({
 	// it, so the library's 30-day default disconnects every client monthly, an
 	// unattended one without anyone noticing.
 	refreshTokenTTL: 365 * 24 * 60 * 60,
+	// A client record lapses 90 days after registering unless told otherwise, and
+	// nothing renews it, so it would take a live grant down with it.
+	clientRegistrationTTL: undefined,
 });
 
 // Both of these are open to anyone holding the URL, and the provider reads a
