@@ -1970,6 +1970,10 @@ const provider = new OAuthProvider({
 	// Registration is open to any client, so the code exchange must carry real
 	// cryptographic proof: plain PKCE offers none.
 	allowPlainPKCE: false,
+	// A grant's lifetime is fixed when it is issued and refreshing does not extend
+	// it, so the library's 30-day default disconnects every client monthly, an
+	// unattended one without anyone noticing.
+	refreshTokenTTL: 365 * 24 * 60 * 60,
 });
 
 // Both of these are open to anyone holding the URL, and the provider reads a
