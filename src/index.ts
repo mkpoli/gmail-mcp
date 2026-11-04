@@ -1976,7 +1976,8 @@ const provider = new OAuthProvider({
 	refreshTokenTTL: 365 * 24 * 60 * 60,
 	// A client record lapses 90 days after registering unless told otherwise, and
 	// nothing renews it, so it would take a live grant down with it.
-	clientRegistrationTTL: undefined,
+	// The library documents undefined as "never expires"; its type only says number.
+	clientRegistrationTTL: undefined as unknown as number,
 });
 
 // Both of these are open to anyone holding the URL, and the provider reads a
